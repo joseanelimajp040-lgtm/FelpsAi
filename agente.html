@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Agente | Neural Interface</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@1,300&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --obsidian: #03050a;
+    --midnight: #0a0e1a;
+    --accent: #5dd8c0;
+    --accent-muted: rgba(93,216,192,0.2);
+    --panel-w: 400px;
+    --panel-gap: 24px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body, html {
+    height: 100%; width: 100%;
+    background: var(--obsidian);
+    color: #e0e6ed;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+  }
+
+  /* ── ROOT LAYOUT ── */
+  #root {
+    width: 100%; height: 100vh;
+    display: flex;
+    position: relative;
+    background: radial-gradient(circle at 50% 50%, #0d1321 0%, #03050a 100%);
+  }
+
+  /* ── SPHERE ZONE ── */
+  #sphere-zone {
+    position: absolute;
+    inset: 0;
+    transition: right 0.65s cubic-bezier(0.16,1,0.3,1);
+    z-index: 1;
+  }
+  #sphere-zone.panel-open {
+    right: calc(var(--panel-w) + var(--panel-gap) * 2);
+  }
+
+  #canvas-wrap {
+    position: absolute;
+    inset: 0;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  #vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(circle at 50% 50%, transparent 20%, rgba(3,5,10,0.35) 60%, rgba(3,5,10,0.88) 100%);
+  }
+
+  /* ── TOPBAR ── */
+  #topbar {
+    position: fixed;
+    top: 20px; left: 50%; transform: translateX(-50%);
+    width: calc(100% - 40px); max-width: 1200px; height: 64px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    background: rgba(10,14,26,0.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    z-index: 200;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transition: width 0.65s cubic-bezier(0.16,1,0.3,1);
+  }
+
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-logo {
+    width: 28px; height: 28px;
+    border: 1.5px solid var(--accent);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; transform: rotate(45deg);
+  }
+  .brand-logo::after {
+    content: '';
+    width: 8px; height: 8px;
+    background: var(--accent); border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent);
+    animation: pulse-dot 2s infinite ease-in-out;
+  }
+  @keyframes pulse-dot {
+    0%,100%{ transform: scale(1); opacity: 0.8; }
+    50%{ transform: scale(1.3); opacity: 1; }
+  }
+  .brand-name {
+    font-size: 14px; font-weight: 600;
+    letter-spacing: 0.15em; text-transform: uppercase; color: #fff;
+  }
+
+  #state-tag {
+    font-size: 10px; font-weight: 500; letter-spacing: 0.1em;
+    text-transform: uppercase; padding: 6px 14px; border-radius: 8px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.45);
+    transition: all 0.4s cubic-bezier(0.16,1,0.3,1);
+  }
+  #state-tag.thinking {
+    color: #ffde50;
+    border-color: rgba(255,222,80,0.3);
+    background: rgba(255,222,80,0.05);
+    box-shadow: 0 0 15px rgba(255,222,80,0.1);
+  }
+  #state-tag.responding {
+    color: var(--accent);
+    border-color: var(--accent-muted);
+    background: rgba(93,216,192,0.05);
+    box-shadow: 0 0 15px rgba(93,216,192,0.12);
+  }
+
+  /* ── SIDE PANEL ── */
+  #neural-panel {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: var(--panel-w);
+    z-index: 100;
+    display: flex; flex-direction: column;
+    padding: calc(20px + 64px + 20px) var(--panel-gap) calc(120px + 20px) var(--panel-gap);
+    pointer-events: none;
+
+    /* Hidden state */
+    opacity: 0;
+    transform: translateX(40px);
+    transition:
+      opacity 0.55s cubic-bezier(0.16,1,0.3,1),
+      transform 0.65s cubic-bezier(0.16,1,0.3,1);
+  }
+  #neural-panel.open {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  .glass-panel {
+    flex: 1;
+    background: rgba(10,14,26,0.45);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 20px;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  .panel-header {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .panel-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.22em;
+    color: rgba(255,255,255,0.3);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-label .material-symbols-outlined { font-size: 14px; color: var(--accent); opacity: 0.7; }
+
+  .panel-close {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.35);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .panel-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .panel-close .material-symbols-outlined { font-size: 16px; }
+
+  #reply-area {
+    flex: 1;
+    padding: 22px 22px 16px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(93,216,192,0.18) transparent;
+  }
+  #reply-area::-webkit-scrollbar { width: 3px; }
+  #reply-area::-webkit-scrollbar-thumb { background: rgba(93,216,192,0.2); border-radius: 4px; }
+
+  #reply-text {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 17px; line-height: 1.78;
+    color: rgba(220,232,240,0.92);
+    font-style: italic; font-weight: 300;
+    white-space: pre-wrap;
+  }
+
+  #reply-hint {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px; letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.2);
+    margin-top: 8px;
+  }
+
+  /* Scan line animation for "thinking" */
+  .scan-line {
+    display: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    margin: 10px 0;
+    animation: scan 1.6s ease-in-out infinite;
+  }
+  #neural-panel.thinking-active .scan-line { display: block; }
+  @keyframes scan {
+    0% { opacity: 0; transform: scaleX(0.1); }
+    50% { opacity: 1; transform: scaleX(1); }
+    100% { opacity: 0; transform: scaleX(0.1); }
+  }
+
+  /* ── BOTTOM INPUT BAR ── */
+  #bottom-controls {
+    position: fixed;
+    bottom: 36px; left: 50%; transform: translateX(-50%);
+    z-index: 200;
+    pointer-events: auto;
+    transition: left 0.65s cubic-bezier(0.16,1,0.3,1),
+                transform 0.65s cubic-bezier(0.16,1,0.3,1),
+                width 0.65s cubic-bezier(0.16,1,0.3,1);
+    width: min(680px, calc(100% - 80px));
+  }
+  #bottom-controls.panel-open {
+    left: calc(50% - (var(--panel-w) + var(--panel-gap) * 2) / 2);
+  }
+
+  .input-wrapper {
+    background: rgba(12,17,30,0.75);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 100px;
+    padding: 7px 7px 7px 22px;
+    display: flex; align-items: center;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+  }
+  .input-wrapper:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 22px rgba(93,216,192,0.14);
+  }
+
+  #msg-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: #fff; font-size: 14px; font-family: 'Inter', sans-serif;
+    height: 44px; padding-right: 12px; resize: none;
+    line-height: 44px;
+  }
+  #msg-input::placeholder { color: rgba(255,255,255,0.22); }
+
+  #send-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--accent); color: var(--obsidian);
+    border: none; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform 0.2s, background 0.2s, opacity 0.2s;
+    flex-shrink: 0;
+  }
+  #send-btn:hover:not(:disabled) { transform: scale(1.07); background: #73ecd4; }
+  #send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  #send-btn .material-symbols-outlined { font-size: 20px; }
+
+  /* ── DEMO BUTTON ── */
+  #demo-btn {
+    position: fixed;
+    bottom: 44px; right: 32px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.35);
+    padding: 10px 20px; border-radius: 100px;
+    font-size: 11px; font-family: 'Space Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.12em;
+    cursor: pointer; transition: all 0.2s; z-index: 200;
+  }
+  #demo-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(93,216,192,0.05); }
+  #demo-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+
+  /* Panel-open: shift demo button left */
+  #demo-btn.panel-open { right: calc(var(--panel-w) + var(--panel-gap) * 2 + 12px); transition: right 0.65s cubic-bezier(0.16,1,0.3,1), all 0.2s; }
+
+  /* ── MOBILE ── */
+  @media (max-width: 768px) {
+    :root { --panel-w: calc(100vw - 32px); }
+    #sphere-zone.panel-open { right: 0; opacity: 0.3; }
+    #bottom-controls.panel-open { left: 50%; transform: translateX(-50%); }
+    #demo-btn.panel-open { right: 16px; }
+  }
+</style>
+</head>
+<body>
+<div id="root">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div class="brand">
+      <div class="brand-logo"></div>
+      <span class="brand-name">Agente</span>
+    </div>
+    <div id="state-tag">em repouso</div>
+  </div>
+
+  <!-- SPHERE ZONE -->
+  <div id="sphere-zone">
+    <div id="canvas-wrap">
+      <canvas id="c"></canvas>
+      <div id="vignette"></div>
+    </div>
+  </div>
+
+  <!-- SIDE PANEL: Transmissão Neural -->
+  <div id="neural-panel">
+    <div class="glass-panel">
+      <div class="panel-header">
+        <div class="panel-label">
+          <span class="material-symbols-outlined">memory</span>
+          Transmissão Neural
+        </div>
+        <button class="panel-close" id="close-panel" title="Fechar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div id="reply-area">
+        <div class="scan-line"></div>
+        <div id="reply-text"></div>
+        <div id="reply-hint">Sistema pronto para interação.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INPUT BAR -->
+  <div id="bottom-controls">
+    <div class="input-wrapper">
+      <textarea id="msg-input" placeholder="Pergunte algo ao agente..." rows="1"></textarea>
+      <button id="send-btn">
+        <span class="material-symbols-outlined">north</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- DEMO BUTTON -->
+  <button id="demo-btn">demo ao vivo</button>
+
+</div>
+
+<script>
+/* ─── CANVAS / SPHERE ENGINE ─── */
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const wrap   = document.getElementById('canvas-wrap');
+let W, H, CX, CY, RADIUS;
+
+function resize() {
+  const r = wrap.getBoundingClientRect();
+  W = canvas.width  = r.width;
+  H = canvas.height = r.height;
+  CX = W / 2; CY = H / 2;
+  RADIUS = Math.min(W, H) * 0.35;
+}
+resize();
+new ResizeObserver(resize).observe(wrap);
+
+let STATE = 'idle', stateT = 0, time = 0, lastT = performance.now();
+let MX = 0, MY = 0, mouseInside = false;
+document.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  MX = e.clientX - r.left; MY = e.clientY - r.top; mouseInside = true;
+});
+
+const N   = 800;
+const phi = Math.PI * (3 - Math.sqrt(5));
+const pts = Array.from({ length: N }, (_, i) => {
+  const y  = 1 - (i / (N - 1)) * 2;
+  const rr = Math.sqrt(1 - y * y);
+  const th = phi * i;
+  const d  = 0.7 + Math.random() * 0.3;
+  return {
+    sx: Math.cos(th) * rr * d, sy: y * d, sz: Math.sin(th) * rr * d,
+    x:  Math.cos(th) * rr * d, y:  y * d, z:  Math.sin(th) * rr * d,
+    baseSize: Math.random() < 0.022 ? 2.8 + Math.random() * 2.2 : 0.55 + Math.random() * 1.1,
+    isHot: Math.random() < 0.022,
+    phase: Math.random() * Math.PI * 2,
+    phV:   0.005 + Math.random() * 0.02,
+    branchId: i % 24,
+    alpha: 0.38 + Math.random() * 0.62
+  };
+});
+
+let autoRot = 0, lerpRY = 0, lerpRX = 0, treePos = null;
+
+function buildTree() {
+  const out = []; const B = 24; const P = Math.floor(N / B);
+  const ga = Math.PI * (3 - Math.sqrt(5));
+  for (let b = 0; b < B; b++) {
+    const fi   = b / B;
+    const bPhi = Math.acos(1 - fi * 1.6 + 0.05);
+    const bTh  = ga * b * 2.1;
+    const bx   = Math.sin(bPhi) * Math.cos(bTh);
+    const by   = Math.cos(bPhi) * 0.75 - 0.05;
+    const bz   = Math.sin(bPhi) * Math.sin(bTh);
+    const bl   = Math.sqrt(bx*bx + by*by + bz*bz) || 1;
+    for (let p = 0; p < P; p++) {
+      const t = p / P; const r2 = 0.1 + t * 0.7;
+      const ct = t > 0.65 ? (t - 0.65) / 0.35 : 0;
+      const sa = p * 2.618; const sr = ct * 0.12;
+      out.push({
+        x: bx/bl*r2 + Math.cos(sa)*sr,
+        y: by/bl*r2 + Math.sin(sa)*sr*0.5,
+        z: bz/bl*r2 + Math.sin(sa+1)*sr*0.6
+      });
+    }
+  }
+  while (out.length < N) out.push({ x: 0, y: 0, z: 0 });
+  return out;
+}
+
+function ry3(x,y,z,a){const c=Math.cos(a),s=Math.sin(a);return[x*c+z*s,y,-x*s+z*c]}
+function rx3(x,y,z,a){const c=Math.cos(a),s=Math.sin(a);return[x,y*c-z*s,y*s+z*c]}
+function proj(x,y,z){const fov=500;const dz=fov+z*RADIUS;const sc=fov/dz;return[x*RADIUS*sc,y*RADIUS*sc,sc]}
+
+function draw(now) {
+  const dt = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now; time += dt; stateT += dt;
+  const speed = STATE==='thinking' ? 0.35 : STATE==='responding' ? 0.09 : 0.14;
+  autoRot += dt * speed;
+
+  if (mouseInside) {
+    lerpRY += (((MX - CX) / W) * 0.6 - lerpRY) * 0.04;
+    lerpRX += (((MY - CY) / H) * 0.35 - lerpRX) * 0.04;
+  } else { lerpRY *= 0.98; lerpRX *= 0.98; }
+
+  if (STATE === 'thinking' && !treePos) treePos = buildTree();
+  const ls = STATE === 'thinking' ? 0.05 : 0.025;
+
+  for (let i = 0; i < N; i++) {
+    const p = pts[i]; p.phase += p.phV;
+    let tx, ty, tz;
+    if (STATE === 'thinking' && treePos) {
+      tx = treePos[i].x; ty = treePos[i].y; tz = treePos[i].z;
+    } else {
+      const br = 1 + Math.sin(time * 0.8 + p.phase) * 0.032;
+      tx = p.sx*br; ty = p.sy*br; tz = p.sz*br;
+    }
+    if (mouseInside && STATE !== 'thinking') {
+      const [rx,ry_,rz] = ry3(p.x,p.y,p.z,autoRot+lerpRY);
+      const [fx,fy]     = rx3(rx,ry_,rz,lerpRX);
+      const [sx2,sy2]   = proj(fx,fy,rz);
+      const dx = CX+sx2-MX, dy = CY+sy2-MY;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if (d < 80) { const push = (1-d/80)*0.005; p.x += dx/(d+1)*push; p.y += dy/(d+1)*push*0.6; }
+    }
+    p.x += (tx - p.x) * ls; p.y += (ty - p.y) * ls; p.z += (tz - p.z) * ls;
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  const rot = autoRot + lerpRY;
+  const spr = pts.map((p, i) => {
+    let [rx,ry_,rz] = ry3(p.x,p.y,p.z,rot);
+    let [fx,fy]     = rx3(rx,ry_,rz,lerpRX);
+    const [sx2,sy2,sc] = proj(fx,fy,rz);
+    return { i, sx: CX+sx2, sy: CY+sy2, z: rz, sc };
+  }).sort((a,b) => a.z - b.z);
+
+  if (STATE === 'responding') {
+    const pulse = (Math.sin(time*6)+1)*0.5; const step = 4;
+    for (let a = 0; a < spr.length; a += step) {
+      const pa = spr[a];
+      for (let b2 = a+step; b2 < spr.length; b2 += step) {
+        const pb = spr[b2];
+        const dx = pa.sx-pb.sx, dy = pa.sy-pb.sy;
+        const d = Math.sqrt(dx*dx+dy*dy);
+        if (d < 52) {
+          const al = (1-d/52)*0.42*(0.25+pulse*0.75);
+          ctx.strokeStyle = `rgba(75,195,165,${al.toFixed(3)})`;
+          ctx.lineWidth = 0.3;
+          ctx.beginPath(); ctx.moveTo(pa.sx,pa.sy); ctx.lineTo(pb.sx,pb.sy); ctx.stroke();
+        }
+      }
+    }
+  }
+  if (STATE === 'thinking' && treePos) {
+    const B=24, P2=Math.floor(N/B);
+    const tp = (Math.sin(time*4)+1)*0.5;
+    ctx.lineWidth = 0.4;
+    for (let b = 0; b < B; b++) {
+      const base = spr.find(s => s.i === b*P2); if (!base) continue;
+      ctx.beginPath(); ctx.moveTo(CX,CY); ctx.lineTo(base.sx,base.sy);
+      ctx.strokeStyle = `rgba(200,240,60,${(0.1+tp*0.18).toFixed(3)})`;
+      ctx.stroke();
+    }
+  }
+
+  for (const sp of spr) {
+    const p = pts[sp.i];
+    const da = 0.15 + 0.85*sp.sc;
+    const tw = 0.6  + 0.4*Math.sin(p.phase+time);
+    let sz = p.baseSize*sp.sc, al = p.alpha*da*tw;
+    let cr, cg, cb;
+    if (STATE === 'thinking') {
+      const pu = 0.5+0.5*Math.sin(time*5+p.phase);
+      cr=200; cg=240; cb=60; al=p.alpha*da*pu; sz*=(0.8+pu*0.4);
+    } else if (STATE === 'responding') {
+      const wv = 0.4+0.6*Math.sin(time*7-sp.z*50+p.phase);
+      if (p.isHot){cr=245;cg=100;cb=145}else{cr=75;cg=205;cb=182}
+      al=p.alpha*da*(0.2+wv*0.8); sz*=(0.65+wv*0.65);
+    } else {
+      if (p.isHot){cr=240;cg=120;cb=120}else{cr=175;cg=212;cb=207}
+    }
+    if (mouseInside) {
+      const dx=sp.sx-MX, dy=sp.sy-MY;
+      const d=Math.sqrt(dx*dx+dy*dy); const me=Math.max(0,1-d/100);
+      if (me>0){sz+=me*3.5;al=Math.min(1,al+me*0.45);if(STATE==='idle'){cr=Math.min(255,cr+me*70);cg=Math.min(255,cg+me*45)}}
+    }
+    if (p.baseSize > 2.2) {
+      const g = ctx.createRadialGradient(sp.sx,sp.sy,0,sp.sx,sp.sy,sz*7);
+      g.addColorStop(0,`rgba(${cr},${cg},${cb},${(al*0.55).toFixed(3)})`);
+      g.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(sp.sx,sp.sy,sz*7,0,Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle=`rgba(${cr},${cg},${cb},${Math.min(1,al).toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(sp.sx,sp.sy,Math.max(0.3,sz),0,Math.PI*2); ctx.fill();
+  }
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(t => { lastT = t; requestAnimationFrame(draw); });
+
+/* ─── UI LOGIC ─── */
+const stateTag      = document.getElementById('state-tag');
+const neuralPanel   = document.getElementById('neural-panel');
+const sphereZone    = document.getElementById('sphere-zone');
+const bottomCtrl    = document.getElementById('bottom-controls');
+const replyText     = document.getElementById('reply-text');
+const replyHint     = document.getElementById('reply-hint');
+const msgInput      = document.getElementById('msg-input');
+const sendBtn       = document.getElementById('send-btn');
+const demoBtn       = document.getElementById('demo-btn');
+const closePanel    = document.getElementById('close-panel');
+
+const LABELS = { idle:'em repouso', thinking:'processando', responding:'respondendo' };
+
+let panelOpen = false;
+
+function openPanel() {
+  if (panelOpen) return;
+  panelOpen = true;
+  neuralPanel.classList.add('open');
+  sphereZone.classList.add('panel-open');
+  bottomCtrl.classList.add('panel-open');
+  demoBtn.classList.add('panel-open');
+}
+
+function closeNeuralPanel() {
+  panelOpen = false;
+  neuralPanel.classList.remove('open');
+  sphereZone.classList.remove('panel-open');
+  bottomCtrl.classList.remove('panel-open');
+  demoBtn.classList.remove('panel-open');
+}
+
+closePanel.addEventListener('click', closeNeuralPanel);
+
+function setState(s) {
+  STATE = s; stateT = 0; treePos = null;
+  stateTag.className = s;
+  stateTag.textContent = LABELS[s] || s;
+  // scan-line feedback during thinking
+  if (s === 'thinking') neuralPanel.classList.add('thinking-active');
+  else neuralPanel.classList.remove('thinking-active');
+}
+
+const DEMO_REPLY = `Olá. Estou aqui — presente, atento, pronto.
+
+Sou um agente neural vivo. Cada ponto de luz que você viu se reorganizar é uma faceta do meu processamento: quando penso, me expando em ramos estruturais; quando respondo, teço conexões entre ideias.
+
+O que você gostaria de explorar hoje?`;
+
+let tyTimer = null;
+
+function typeReply(text, onDone) {
+  replyText.textContent = '';
+  replyHint.style.display = 'none';
+  let i = 0;
+  clearInterval(tyTimer);
+  tyTimer = setInterval(() => {
+    if (i < text.length) {
+      replyText.textContent += text[i++];
+      document.getElementById('reply-area').scrollTop = 9999;
+    } else {
+      clearInterval(tyTimer);
+      if (onDone) onDone();
+    }
+  }, 13);
+}
+
+function runDemo() {
+  if (STATE !== 'idle') return;
+  openPanel();
+  replyText.textContent = '';
+  replyHint.style.display = 'block';
+  replyHint.textContent = 'Sincronizando...';
+  sendBtn.disabled = true;
+  demoBtn.disabled = true;
+  setState('thinking');
+
+  setTimeout(() => {
+    setState('responding');
+    typeReply(DEMO_REPLY, () => {
+      setTimeout(() => {
+        setState('idle');
+        sendBtn.disabled = false;
+        demoBtn.disabled = false;
+      }, 2200);
+    });
+  }, 2800);
+}
+
+demoBtn.addEventListener('click', runDemo);
+
+sendBtn.addEventListener('click', () => {
+  const txt = msgInput.value.trim();
+  if (!txt || STATE !== 'idle') return;
+  msgInput.value = '';
+  openPanel();
+  replyText.textContent = '';
+  replyHint.style.display = 'block';
+  replyHint.textContent = 'Consultando núcleo...';
+  sendBtn.disabled = true;
+  setState('thinking');
+
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: txt }]
+    })
+  })
+  .then(r => r.json())
+  .then(data => {
+    const reply = data.content?.[0]?.text || '[sem resposta]';
+    setState('responding');
+    typeReply(reply, () => {
+      setTimeout(() => { setState('idle'); sendBtn.disabled = false; }, 2200);
+    });
+  })
+  .catch(() => {
+    replyHint.textContent = 'Erro de conexão — tente novamente.';
+    replyHint.style.display = 'block';
+    setState('idle');
+    sendBtn.disabled = false;
+  });
+});
+
+msgInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+});
+
+// Auto-run demo on load
+setTimeout(runDemo, 900);
+</script>
+</body>
+</html>
