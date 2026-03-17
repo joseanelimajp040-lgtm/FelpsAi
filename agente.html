@@ -268,23 +268,29 @@
   #send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
   #send-btn .material-symbols-outlined { font-size: 20px; }
 
-  /* ── DEMO BUTTON ── */
-  #demo-btn {
+  /* Gemini badge */
+  #gemini-badge {
     position: fixed;
     bottom: 44px; right: 32px;
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.35);
-    padding: 10px 20px; border-radius: 100px;
-    font-size: 11px; font-family: 'Space Mono', monospace;
-    text-transform: uppercase; letter-spacing: 0.12em;
-    cursor: pointer; transition: all 0.2s; z-index: 200;
+    display: flex; align-items: center; gap: 7px;
+    background: rgba(10,14,26,0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 100px;
+    padding: 7px 14px 7px 10px;
+    font-size: 10px; font-family: 'Space Mono', monospace;
+    letter-spacing: 0.12em; color: rgba(255,255,255,0.28);
+    z-index: 200; pointer-events: none;
+    transition: right 0.65s cubic-bezier(0.16,1,0.3,1);
   }
-  #demo-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(93,216,192,0.05); }
-  #demo-btn:disabled { opacity: 0.25; cursor: not-allowed; }
-
-  /* Panel-open: shift demo button left */
-  #demo-btn.panel-open { right: calc(var(--panel-w) + var(--panel-gap) * 2 + 12px); transition: right 0.65s cubic-bezier(0.16,1,0.3,1), all 0.2s; }
+  #gemini-badge.panel-open { right: calc(var(--panel-w) + var(--panel-gap) * 2 + 12px); }
+  .gem-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: conic-gradient(#4285F4, #EA4335, #FBBC05, #34A853, #4285F4);
+    animation: gem-spin 3s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes gem-spin { to { transform: rotate(360deg); } }
 
   /* ── MOBILE ── */
   @media (max-width: 768px) {
@@ -345,8 +351,11 @@
     </div>
   </div>
 
-  <!-- DEMO BUTTON -->
-  <button id="demo-btn">demo ao vivo</button>
+  <!-- GEMINI BADGE -->
+  <div id="gemini-badge">
+    <div class="gem-dot"></div>
+    gemini 2.0 flash
+  </div>
 
 </div>
 
@@ -540,8 +549,11 @@ const replyText     = document.getElementById('reply-text');
 const replyHint     = document.getElementById('reply-hint');
 const msgInput      = document.getElementById('msg-input');
 const sendBtn       = document.getElementById('send-btn');
-const demoBtn       = document.getElementById('demo-btn');
 const closePanel    = document.getElementById('close-panel');
+const geminiBadge   = document.getElementById('gemini-badge');
+
+const GEMINI_KEY = 'AIzaSyBdNbunJaNjDag3ZKkBr4DCFltr5u7PIbk';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
 
 const LABELS = { idle:'em repouso', thinking:'processando', responding:'respondendo' };
 
@@ -553,7 +565,7 @@ function openPanel() {
   neuralPanel.classList.add('open');
   sphereZone.classList.add('panel-open');
   bottomCtrl.classList.add('panel-open');
-  demoBtn.classList.add('panel-open');
+  geminiBadge.classList.add('panel-open');
 }
 
 function closeNeuralPanel() {
@@ -561,7 +573,7 @@ function closeNeuralPanel() {
   neuralPanel.classList.remove('open');
   sphereZone.classList.remove('panel-open');
   bottomCtrl.classList.remove('panel-open');
-  demoBtn.classList.remove('panel-open');
+  geminiBadge.classList.remove('panel-open');
 }
 
 closePanel.addEventListener('click', closeNeuralPanel);
@@ -570,16 +582,9 @@ function setState(s) {
   STATE = s; stateT = 0; treePos = null;
   stateTag.className = s;
   stateTag.textContent = LABELS[s] || s;
-  // scan-line feedback during thinking
   if (s === 'thinking') neuralPanel.classList.add('thinking-active');
   else neuralPanel.classList.remove('thinking-active');
 }
-
-const DEMO_REPLY = `Olá. Estou aqui — presente, atento, pronto.
-
-Sou um agente neural vivo. Cada ponto de luz que você viu se reorganizar é uma faceta do meu processamento: quando penso, me expando em ramos estruturais; quando respondo, teço conexões entre ideias.
-
-O que você gostaria de explorar hoje?`;
 
 let tyTimer = null;
 
@@ -599,31 +604,20 @@ function typeReply(text, onDone) {
   }, 13);
 }
 
-function runDemo() {
-  if (STATE !== 'idle') return;
-  openPanel();
-  replyText.textContent = '';
-  replyHint.style.display = 'block';
-  replyHint.textContent = 'Sincronizando...';
-  sendBtn.disabled = true;
-  demoBtn.disabled = true;
-  setState('thinking');
-
-  setTimeout(() => {
-    setState('responding');
-    typeReply(DEMO_REPLY, () => {
-      setTimeout(() => {
-        setState('idle');
-        sendBtn.disabled = false;
-        demoBtn.disabled = false;
-      }, 2200);
-    });
-  }, 2800);
+async function askGemini(userText) {
+  const res = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: userText }] }]
+    })
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '[sem resposta]';
 }
 
-demoBtn.addEventListener('click', runDemo);
-
-sendBtn.addEventListener('click', () => {
+sendBtn.addEventListener('click', async () => {
   const txt = msgInput.value.trim();
   if (!txt || STATE !== 'idle') return;
   msgInput.value = '';
@@ -634,37 +628,24 @@ sendBtn.addEventListener('click', () => {
   sendBtn.disabled = true;
   setState('thinking');
 
-  fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      messages: [{ role: 'user', content: txt }]
-    })
-  })
-  .then(r => r.json())
-  .then(data => {
-    const reply = data.content?.[0]?.text || '[sem resposta]';
+  try {
+    const reply = await askGemini(txt);
     setState('responding');
     typeReply(reply, () => {
       setTimeout(() => { setState('idle'); sendBtn.disabled = false; }, 2200);
     });
-  })
-  .catch(() => {
+  } catch (err) {
     replyHint.textContent = 'Erro de conexão — tente novamente.';
     replyHint.style.display = 'block';
+    replyText.textContent = '';
     setState('idle');
     sendBtn.disabled = false;
-  });
+  }
 });
 
 msgInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
 });
-
-// Auto-run demo on load
-setTimeout(runDemo, 900);
 </script>
 </body>
 </html>
