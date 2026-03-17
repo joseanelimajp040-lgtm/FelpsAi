@@ -354,7 +354,7 @@
   <!-- GEMINI BADGE -->
   <div id="gemini-badge">
     <div class="gem-dot"></div>
-    gemini 2.0 flash
+    gemini 1.5 flash
   </div>
 
 </div>
@@ -553,7 +553,8 @@ const closePanel    = document.getElementById('close-panel');
 const geminiBadge   = document.getElementById('gemini-badge');
 
 const GEMINI_KEY = 'AIzaSyBdNbunJaNjDag3ZKkBr4DCFltr5u7PIbk';
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
 
 const LABELS = { idle:'em repouso', thinking:'processando', responding:'respondendo' };
 
@@ -609,10 +610,15 @@ async function askGemini(userText) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: userText }] }]
+      contents: [{ parts: [{ text: userText }] }],
+      generationConfig: { maxOutputTokens: 1024 }
     })
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    const msg = errData?.error?.message || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
   const data = await res.json();
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '[sem resposta]';
 }
@@ -635,7 +641,8 @@ sendBtn.addEventListener('click', async () => {
       setTimeout(() => { setState('idle'); sendBtn.disabled = false; }, 2200);
     });
   } catch (err) {
-    replyHint.textContent = 'Erro de conexão — tente novamente.';
+    const msg = err.message || 'Erro desconhecido';
+    replyHint.textContent = `⚠ ${msg}`;
     replyHint.style.display = 'block';
     replyText.textContent = '';
     setState('idle');
