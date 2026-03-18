@@ -140,18 +140,31 @@
     pointer-events: auto;
   }
 
-  .glass-panel {
-    flex: 1;
-    background: rgba(10,14,26,0.45);
-    backdrop-filter: blur(22px);
-    -webkit-backdrop-filter: blur(22px);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 20px;
-    overflow: hidden;
-    display: flex; flex-direction: column;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
-  }
+  /* FIX: scroll no painel de resposta */
+.glass-panel {
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 
+#reply-area {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  padding: 22px 22px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(93,216,192,0.25) transparent;
+}
+
+#reply-area::-webkit-scrollbar { width: 4px; }
+#reply-area::-webkit-scrollbar-track { background: transparent; }
+#reply-area::-webkit-scrollbar-thumb {
+  background: rgba(93,216,192,0.25);
+  border-radius: 4px;
+}
+  
   .panel-header {
     padding: 18px 20px 14px;
     border-bottom: 1px solid rgba(255,255,255,0.05);
@@ -299,6 +312,211 @@
     #bottom-controls.panel-open { left: 50%; transform: translateX(-50%); }
     #demo-btn.panel-open { right: 16px; }
   }
+  /* MELHORIA: tipografia do reply */
+#reply-text {
+  font-family: 'Inter', sans-serif !important;
+  font-size: 15px !important;
+  font-style: normal !important;
+  font-weight: 400 !important;
+  line-height: 1.85 !important;
+  color: rgba(225, 238, 248, 0.93) !important;
+  letter-spacing: 0.012em;
+  white-space: pre-wrap;
+}
+
+#reply-hint {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.2);
+  margin-top: 12px;
+}
+/* ── BOTÃO HAMBÚRGUER ── */
+#menu-btn {
+  position: fixed;
+  bottom: 38px;
+  left: 32px;
+  z-index: 300;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: rgba(12,17,30,0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 6px 28px rgba(0,0,0,0.38);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+#menu-btn:hover {
+  background: rgba(93,216,192,0.12);
+  border-color: rgba(93,216,192,0.3);
+  box-shadow: 0 0 18px rgba(93,216,192,0.18);
+  transform: scale(1.06);
+}
+#menu-btn .bar {
+  display: block;
+  width: 18px; height: 1.5px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+#menu-btn:hover .bar { background: var(--accent); }
+
+/* ── OVERLAY E PAINEL DE HISTÓRICO ── */
+#history-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(3,5,10,0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 0 0 32px 32px;
+  opacity: 1;
+  transition: opacity 0.3s;
+}
+#history-overlay.hist-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#history-panel {
+  width: 340px;
+  max-height: 70vh;
+  background: rgba(10,14,26,0.92);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateY(0);
+  transition: transform 0.35s cubic-bezier(0.16,1,0.3,1);
+}
+#history-overlay.hist-hidden #history-panel {
+  transform: translateY(20px);
+}
+
+.hist-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.hist-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.35);
+}
+.hist-title .material-symbols-outlined {
+  font-size: 15px;
+  color: var(--accent);
+  opacity: 0.75;
+}
+#hist-close {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+#hist-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
+#hist-close .material-symbols-outlined { font-size: 16px; }
+
+#hist-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 10px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(93,216,192,0.18) transparent;
+}
+#hist-list::-webkit-scrollbar { width: 3px; }
+#hist-list::-webkit-scrollbar-thumb { background: rgba(93,216,192,0.2); border-radius: 4px; }
+
+.hist-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.18s;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  margin-bottom: 2px;
+}
+.hist-item:hover { background: rgba(93,216,192,0.07); }
+.hist-item .hi-q {
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.hist-item .hi-meta {
+  font-size: 10px;
+  font-family: 'Space Mono', monospace;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 0.08em;
+}
+
+#hist-empty {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255,255,255,0.2);
+  padding: 28px 16px;
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.1em;
+}
+
+#hist-clear {
+  margin: 8px 10px 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255,80,80,0.06);
+  border: 1px solid rgba(255,80,80,0.15);
+  color: rgba(255,120,120,0.65);
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+#hist-clear:hover {
+  background: rgba(255,80,80,0.14);
+  border-color: rgba(255,80,80,0.35);
+  color: rgba(255,140,140,0.9);
+}
+#hist-clear .material-symbols-outlined { font-size: 15px; }
+
+@media (max-width: 768px) {
+  #history-panel { width: calc(100vw - 48px); }
+  #menu-btn { bottom: 110px; left: 20px; }
+}
 </style>
 </head>
 <body>
@@ -308,7 +526,7 @@
   <div id="topbar">
     <div class="brand">
       <div class="brand-logo"></div>
-      <span class="brand-name">Agente</span>
+      <span class="brand-name">FelpsAi</span>
     </div>
     <div id="state-tag">em repouso</div>
   </div>
@@ -344,6 +562,16 @@
   <!-- INPUT BAR -->
   <div id="bottom-controls">
     <div class="input-wrapper">
+      <input type="file" id="img-input" accept="image/*" style="display:none">
+<button id="img-btn" title="Enviar imagem" style="
+  width:38px; height:38px; border-radius:50%; background:transparent;
+  border:1px solid rgba(255,255,255,0.12); color:rgba(255,255,255,0.45);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; margin-right:8px; flex-shrink:0; transition:all 0.2s;
+" onmouseover="this.style.borderColor='rgba(93,216,192,0.5)';this.style.color='#5dd8c0'"
+   onmouseout="this.style.borderColor='rgba(255,255,255,0.12)';this.style.color='rgba(255,255,255,0.45)'">
+  <span class="material-symbols-outlined" style="font-size:18px">image</span>
+</button>
       <textarea id="msg-input" placeholder="Pergunte algo ao agente..." rows="1"></textarea>
       <button id="send-btn">
         <span class="material-symbols-outlined">north</span>
@@ -351,11 +579,33 @@
     </div>
   </div>
 
-  <!-- GEMINI BADGE -->
-  <div id="gemini-badge">
-    <div class="gem-dot"></div>
-    gemini 2.5 flash
+<!-- BOTÃO HAMBÚRGUER -->
+<button id="menu-btn" title="Histórico de conversas">
+  <span class="bar"></span>
+  <span class="bar"></span>
+  <span class="bar"></span>
+</button>
+
+<!-- PAINEL DE HISTÓRICO -->
+<div id="history-overlay" class="hist-hidden">
+  <div id="history-panel">
+    <div class="hist-header">
+      <span class="hist-title">
+        <span class="material-symbols-outlined">history</span>
+        Histórico
+      </span>
+      <button id="hist-close">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div id="hist-list"></div>
+    <div id="hist-empty">Nenhuma conversa ainda.</div>
+    <button id="hist-clear">
+      <span class="material-symbols-outlined">delete_sweep</span>
+      Limpar histórico
+    </button>
   </div>
+</div>
 
 </div>
 
@@ -552,10 +802,10 @@ const sendBtn       = document.getElementById('send-btn');
 const closePanel    = document.getElementById('close-panel');
 const geminiBadge   = document.getElementById('gemini-badge');
 
-const GEMINI_KEY = 'AIzaSyBdNbunJaNjDag3ZKkBr4DCFltr5u7PIbk';
+const GEMINI_KEY = 'AIzaSyBh-VmLoAnrOO2Sz_ScLV_3aLBwBh4w3x0';
 const GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_KEY}`;
-
+let conversationHistory = []; // memória da conversa atual
 const LABELS = { idle:'em repouso', thinking:'processando', responding:'respondendo' };
 
 let panelOpen = false;
@@ -566,21 +816,23 @@ function openPanel() {
   neuralPanel.classList.add('open');
   sphereZone.classList.add('panel-open');
   bottomCtrl.classList.add('panel-open');
-  geminiBadge.classList.add('panel-open');
+  if (geminiBadge) geminiBadge.classList.add('panel-open');
 }
 
 function closeNeuralPanel() {
   panelOpen = false;
+  conversationHistory = [];
   neuralPanel.classList.remove('open');
   sphereZone.classList.remove('panel-open');
   bottomCtrl.classList.remove('panel-open');
-  geminiBadge.classList.remove('panel-open');
+  if (geminiBadge) geminiBadge.classList.remove('panel-open');
 }
 
 closePanel.addEventListener('click', closeNeuralPanel);
 
 function setState(s) {
-  STATE = s; stateT = 0; treePos = null;
+  STATE = s; stateT = 0;
+  treePos = (s === 'thinking') ? buildTree() : null;
   stateTag.className = s;
   stateTag.textContent = LABELS[s] || s;
   if (s === 'thinking') neuralPanel.classList.add('thinking-active');
@@ -605,37 +857,101 @@ function typeReply(text, onDone) {
   }, 13);
 }
 
-async function askGemini(userText) {
+async function askGemini(userText, imageBase64 = null, imageMime = null) {
+  const userParts = [];
+
+  if (imageBase64 && imageMime) {
+    userParts.push({ inline_data: { mime_type: imageMime, data: imageBase64 } });
+  }
+  userParts.push({ text: userText || 'Descreva esta imagem detalhadamente.' });
+
+  conversationHistory.push({ role: 'user', parts: userParts });
+
   const res = await fetch(GEMINI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: userText }] }],
-      generationConfig: { maxOutputTokens: 1024 }
+      contents: conversationHistory,
+      generationConfig: { maxOutputTokens: 8192 }
     })
   });
+
   if (!res.ok) {
+    conversationHistory.pop();
     const errData = await res.json().catch(() => ({}));
-    const msg = errData?.error?.message || `HTTP ${res.status}`;
-    throw new Error(msg);
+    throw new Error(errData?.error?.message || `HTTP ${res.status}`);
   }
+
   const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '[sem resposta]';
+  const replyMsg = data.candidates?.[0]?.content?.parts?.[0]?.text || '[sem resposta]';
+
+  conversationHistory.push({ role: 'model', parts: [{ text: replyMsg }] });
+
+  return replyMsg;
 }
+
+let pendingImage = null; // { base64, mime, name }
+
+const imgInput = document.getElementById('img-input');
+const imgBtn   = document.getElementById('img-btn');
+
+imgBtn.addEventListener('click', () => imgInput.click());
+
+imgInput.addEventListener('change', () => {
+  const file = imgInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    const base64  = dataUrl.split(',')[1];
+    pendingImage  = { base64, mime: file.type, name: file.name };
+
+    // Feedback visual no botão
+    imgBtn.style.borderColor = 'rgba(93,216,192,0.7)';
+    imgBtn.style.color       = '#5dd8c0';
+    imgBtn.style.background  = 'rgba(93,216,192,0.08)';
+    imgBtn.title = `Imagem: ${file.name}`;
+  };
+  reader.readAsDataURL(file);
+  imgInput.value = ''; // permite selecionar o mesmo arquivo de novo
+});
 
 sendBtn.addEventListener('click', async () => {
   const txt = msgInput.value.trim();
-  if (!txt || STATE !== 'idle') return;
+  if ((!txt && !pendingImage) || STATE !== 'idle') return;
+
+  const imageToSend = pendingImage;
+  pendingImage = null;
+
+  // Reseta visual do botão de imagem
+  imgBtn.style.borderColor = 'rgba(255,255,255,0.12)';
+  imgBtn.style.color       = 'rgba(255,255,255,0.45)';
+  imgBtn.style.background  = 'transparent';
+  imgBtn.title             = 'Enviar imagem';
+
   msgInput.value = '';
-  openPanel();
+  setState('thinking');
   replyText.textContent = '';
   replyHint.style.display = 'block';
-  replyHint.textContent = 'Consultando núcleo...';
+  replyHint.textContent = imageToSend ? 'Analisando imagem...' : 'Consultando núcleo...';
   sendBtn.disabled = true;
-  setState('thinking');
+  requestAnimationFrame(() => openPanel());
 
   try {
-    const reply = await askGemini(txt);
+    const raw = await askGemini(
+      txt,
+      imageToSend?.base64 || null,
+      imageToSend?.mime   || null
+    );
+    const reply = raw
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/^#{1,3}\s+/gm, '')
+      .replace(/`{1,3}([^`]*)`{1,3}/g, '$1')
+      .replace(/^\s*[-*]\s+/gm, '• ')
+      .trim();
+    saveToHistory(txt || '(imagem enviada)', reply);
     setState('responding');
     typeReply(reply, () => {
       setTimeout(() => { setState('idle'); sendBtn.disabled = false; }, 2200);
@@ -653,6 +969,82 @@ sendBtn.addEventListener('click', async () => {
 msgInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
 });
+/* ─── HISTÓRICO DE CONVERSAS ─── */
+const HIST_KEY = 'felpsai_history';
+const menuBtn       = document.getElementById('menu-btn');
+const histOverlay   = document.getElementById('history-overlay');
+const histList      = document.getElementById('hist-list');
+const histEmpty     = document.getElementById('hist-empty');
+const histClose     = document.getElementById('hist-close');
+const histClear     = document.getElementById('hist-clear');
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HIST_KEY)) || []; }
+  catch { return []; }
+}
+
+function saveToHistory(question, answer) {
+  const hist = loadHistory();
+  hist.unshift({
+    id: Date.now(),
+    q: question,
+    a: answer,
+    date: new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
+  });
+  // Mantém só as últimas 60 conversas
+  localStorage.setItem(HIST_KEY, JSON.stringify(hist.slice(0, 60)));
+}
+
+function renderHistory() {
+  const hist = loadHistory();
+  histList.innerHTML = '';
+  if (hist.length === 0) {
+    histEmpty.style.display = 'block';
+    histClear.style.display = 'none';
+    return;
+  }
+  histEmpty.style.display = 'none';
+  histClear.style.display = 'flex';
+
+  hist.forEach(item => {
+    const el = document.createElement('div');
+    el.className = 'hist-item';
+    el.innerHTML = `
+      <div class="hi-q">${item.q.slice(0, 72)}${item.q.length > 72 ? '…' : ''}</div>
+      <div class="hi-meta">${item.date}</div>
+    `;
+    el.addEventListener('click', () => {
+      openPanel();
+      replyText.textContent = item.a;
+      replyHint.style.display = 'none';
+      setState('idle');
+      sendBtn.disabled = false;
+      histOverlay.classList.add('hist-hidden');
+    });
+    histList.appendChild(el);
+  });
+}
+
+menuBtn.addEventListener('click', () => {
+  renderHistory();
+  histOverlay.classList.toggle('hist-hidden');
+});
+
+histClose.addEventListener('click', () => {
+  histOverlay.classList.add('hist-hidden');
+});
+
+histOverlay.addEventListener('click', e => {
+  if (e.target === histOverlay) histOverlay.classList.add('hist-hidden');
+});
+
+histClear.addEventListener('click', () => {
+  if (confirm('Limpar todo o histórico de conversas?')) {
+    localStorage.removeItem(HIST_KEY);
+    renderHistory();
+  }
+});
+
 </script>
 </body>
 </html>
