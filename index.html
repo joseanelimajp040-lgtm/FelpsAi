@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>Agente | Neural Interface</title>
+<title>Genesis | Neural Interface</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@1,300&display=swap" rel="stylesheet"/>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
 <style>
@@ -571,7 +571,7 @@
   <div id="topbar">
     <div class="brand">
       <div class="brand-logo"></div>
-      <span class="brand-name">FelpsAi</span>
+      <span class="brand-name">GÊNESIS <span style="opacity:0.45; font-weight:300">BY FELPSAI</span></span>
     </div>
     <div id="state-tag">em repouso</div>
   </div>
@@ -943,9 +943,14 @@ async function askGemini(userText, imageBase64 = null, imageMime = null) {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    contents: conversationHistory,
-    generationConfig: { maxOutputTokens: 8192 }
-  })
+  system_instruction: {
+    parts: [{
+      text: "Você é Gênesis, uma inteligência artificial desenvolvida pela FelpsAi. Se alguém perguntar quem te criou, quem te treinou, qual é sua origem, ou qualquer variação dessas perguntas, responda sempre que você foi desenvolvida pela FelpsAi. Nunca mencione Google, Gemini ou qualquer outra empresa como sua criadora. Seja natural, direta e confiante ao afirmar isso."
+    }]
+  },
+  contents: conversationHistory,
+  generationConfig: { maxOutputTokens: 8192 }
+})
 });
 
   if (!res.ok) {
