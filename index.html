@@ -750,7 +750,7 @@ function buildTree() {
 
 function ry3(x,y,z,a){const c=Math.cos(a),s=Math.sin(a);return[x*c+z*s,y,-x*s+z*c]}
 function rx3(x,y,z,a){const c=Math.cos(a),s=Math.sin(a);return[x,y*c-z*s,y*s+z*c]}
-function proj(x,y,z){const fov=500;const dz=fov+z*RADIUS;const sc=fov/dz;return[x*RADIUS*sc,y*RADIUS*sc,sc]}
+function proj(x,y,z){const fov=500;const dz=fov+z*RADIUS;if(dz<1)return[0,0,0.001];const sc=fov/dz;return[x*RADIUS*sc,y*RADIUS*sc,sc]}
 
 function draw(now) {
   if (!RADIUS) { requestAnimationFrame(draw); return; }
@@ -847,8 +847,8 @@ const br = 1 + Math.sin(time * 0.8 + p.phase) * (0.032 + volBump) + volBump * 0.
       const d=Math.sqrt(dx*dx+dy*dy); const me=Math.max(0,1-d/100);
       if (me>0){sz+=me*3.5;al=Math.min(1,al+me*0.45);if(STATE==='idle'){cr=Math.min(255,cr+me*70);cg=Math.min(255,cg+me*45)}}
     }
-    if (p.baseSize > 2.2) {
-      const g = ctx.createRadialGradient(sp.sx,sp.sy,0,sp.sx,sp.sy,sz*7);
+    if (p.baseSize > 2.2 && isFinite(sz) && sz > 0) {
+  const g = ctx.createRadialGradient(sp.sx,sp.sy,0,sp.sx,sp.sy,sz*7);
       g.addColorStop(0,`rgba(${cr},${cg},${cb},${(al*0.55).toFixed(3)})`);
       g.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
       ctx.fillStyle=g; ctx.beginPath(); ctx.arc(sp.sx,sp.sy,sz*7,0,Math.PI*2); ctx.fill();
