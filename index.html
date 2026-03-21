@@ -859,10 +859,8 @@ CX = W / 2; CY = H / 2;
 RADIUS = Math.min(W, H) * 0.35;
 
 function resize() {
-  const r = wrap.getBoundingClientRect();
-  if (r.width < 50 || r.height < 50) return;
-  W = canvas.width  = r.width;
-  H = canvas.height = r.height;
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
   CX = W / 2; CY = H / 2;
   RADIUS = Math.min(W, H) * 0.35;
 }
