@@ -4,7 +4,7 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const GEMINI_API_KEY = process.env.GEMINI_KEY;
   if (!GEMINI_API_KEY) {
     return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured' }) };
   }
