@@ -388,11 +388,6 @@
   animation: pulse-dot 2.2s ease-in-out infinite;
 }
 .live-dot.active { opacity: 1; }
-#token-count {
-  font-size: 9px; font-family: 'Space Mono', monospace;
-  letter-spacing: 0.1em; color: rgba(130,155,175,0.4);
-}
-#token-count span { color: rgba(93,216,192,0.5); font-weight: 700; }
 .typing-cursor {
   display: inline-block; width: 2px; height: 1em;
   background: #5dd8c0; margin-left: 2px;
@@ -1036,12 +1031,10 @@ function parseRichText(md) {
 const richContent  = document.getElementById('rich-content');
 const liveDotEl    = document.getElementById('live-dot');
 const footerStatus = document.getElementById('footer-status');
-const tokenCountEl = document.getElementById('token-count');
 
 function renderRichReply(md, onDone) {
   richContent.innerHTML = '';
   replyHint.style.display = 'none';
-  tokenCountEl.textContent = '';
   liveDotEl.classList.add('active');
   footerStatus.textContent = 'transmitindo';
 
