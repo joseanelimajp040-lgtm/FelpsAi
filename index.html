@@ -619,6 +619,87 @@
 #vol-ring.active {
   opacity: 1;
 }
+/* ── MODAL DE GERAÇÃO DE IMAGEM ── */
+#imggen-overlay {
+  position: fixed; inset: 0; z-index: 600;
+  background: rgba(3,5,10,0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 1; transition: opacity 0.3s;
+}
+#imggen-overlay.imggen-hidden {
+  opacity: 0; pointer-events: none;
+}
+#imggen-modal {
+  width: min(480px, calc(100vw - 32px));
+  background: rgba(10,14,26,0.95);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 20px;
+  box-shadow: 0 28px 72px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05);
+  padding: 24px;
+  display: flex; flex-direction: column; gap: 16px;
+  transform: translateY(0); transition: transform 0.35s cubic-bezier(0.16,1,0.3,1);
+}
+#imggen-overlay.imggen-hidden #imggen-modal { transform: translateY(24px); }
+
+.imggen-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em;
+  color: rgba(255,255,255,0.3); display: flex; align-items: center; gap: 8px;
+}
+.imggen-title .material-symbols-outlined { font-size: 15px; color: #5dd8c0; opacity: 0.8; }
+
+#imggen-prompt {
+  width: 100%; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 12px; padding: 13px 15px;
+  color: #e0e6ed; font-size: 14px; font-family: 'Inter', sans-serif;
+  resize: none; outline: none; min-height: 96px; line-height: 1.6;
+  transition: border-color 0.2s;
+}
+#imggen-prompt:focus { border-color: rgba(93,216,192,0.45); }
+#imggen-prompt::placeholder { color: rgba(255,255,255,0.2); }
+
+.imggen-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.imggen-btn {
+  padding: 10px 20px; border-radius: 10px; font-size: 13px;
+  font-family: 'Inter', sans-serif; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.09);
+  transition: all 0.2s;
+}
+#imggen-cancel { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.45); }
+#imggen-cancel:hover { background: rgba(255,255,255,0.08); color: #fff; }
+#imggen-generate {
+  background: var(--accent); color: var(--obsidian);
+  border-color: transparent; font-weight: 600;
+}
+#imggen-generate:hover:not(:disabled) { background: #73ecd4; }
+#imggen-generate:disabled { opacity: 0.35; cursor: not-allowed; }
+
+#imggen-result {
+  display: none; flex-direction: column; gap: 12px; align-items: center;
+}
+#imggen-result img {
+  width: 100%; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+#imggen-result-actions { display: flex; gap: 8px; }
+.imggen-action-btn {
+  padding: 8px 16px; border-radius: 8px; font-size: 12px;
+  font-family: 'Inter', sans-serif; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6);
+  display: flex; align-items: center; gap: 6px;
+  transition: all 0.2s;
+}
+.imggen-action-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.imggen-action-btn .material-symbols-outlined { font-size: 15px; }
+
+#imggen-status {
+  font-size: 11px; font-family: 'Space Mono', monospace;
+  letter-spacing: 0.1em; color: rgba(93,216,192,0.6);
+  text-align: center; min-height: 18px;
+}
 </style>
 </head>
 <body>
@@ -720,6 +801,25 @@
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
+    <button id="hist-imggen-btn" style="
+  margin: 10px 10px 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(93,216,192,0.07);
+  border: 1px solid rgba(93,216,192,0.18);
+  color: rgba(93,216,192,0.85);
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 9px;
+  width: calc(100% - 20px);
+  transition: all 0.2s;
+" onmouseover="this.style.background='rgba(93,216,192,0.14)'"
+   onmouseout="this.style.background='rgba(93,216,192,0.07)'">
+  <span class="material-symbols-outlined" style="font-size:17px">auto_awesome</span>
+  Criar imagem
+</button>
     <div id="hist-list"></div>
     <div id="hist-empty">Nenhuma conversa ainda.</div>
     <button id="hist-clear">
@@ -728,7 +828,40 @@
     </button>
   </div>
 </div>
+<!-- MODAL GERAÇÃO DE IMAGEM -->
+<div id="imggen-overlay" class="imggen-hidden">
+  <div id="imggen-modal">
+    <div class="imggen-title">
+      <span class="material-symbols-outlined">auto_awesome</span>
+      Criar imagem com IA
+    </div>
 
+    <textarea id="imggen-prompt" placeholder="Descreva a imagem que você quer criar...&#10;Ex: Um gato astronauta flutuando no espaço, estilo aquarela"></textarea>
+
+    <div id="imggen-status"></div>
+
+    <div id="imggen-result">
+      <img id="imggen-img" src="" alt="Imagem gerada">
+      <div id="imggen-result-actions">
+        <button class="imggen-action-btn" id="imggen-download">
+          <span class="material-symbols-outlined">download</span> Baixar
+        </button>
+        <button class="imggen-action-btn" id="imggen-new">
+          <span class="material-symbols-outlined">refresh</span> Nova imagem
+        </button>
+      </div>
+    </div>
+
+    <div class="imggen-actions">
+      <button class="imggen-btn" id="imggen-cancel">Cancelar</button>
+      <button class="imggen-btn" id="imggen-generate">
+        <span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle;margin-right:4px">auto_awesome</span>
+        Gerar
+      </button>
+    </div>
+  </div>
+</div>
+  
 </div>
 
 <script>
@@ -1265,6 +1398,10 @@ histClear.addEventListener('click', () => {
     renderHistory();
   }
 });
+document.getElementById('hist-imggen-btn').addEventListener('click', () => {
+  histOverlay.classList.add('hist-hidden');
+  openImgGen();
+});
 /* ─── ÁUDIO: VOZ + VOLUME NA ESFERA ─── */
 
 let audioVolume = 0; // lido pelo engine da esfera
@@ -1471,6 +1608,76 @@ ttsBtn.addEventListener('click', () => {
       audio.play();
     } catch { onEnd(); }
   })();
+});
+/* ─── GERAÇÃO DE IMAGEM (Imagen 3 Nano) ─── */
+const imggenOverlay  = document.getElementById('imggen-overlay');
+const imggenPrompt   = document.getElementById('imggen-prompt');
+const imggenGenerate = document.getElementById('imggen-generate');
+const imggenCancel   = document.getElementById('imggen-cancel');
+const imggenStatus   = document.getElementById('imggen-status');
+const imggenResult   = document.getElementById('imggen-result');
+const imggenImg      = document.getElementById('imggen-img');
+const imggenDownload = document.getElementById('imggen-download');
+const imggenNew      = document.getElementById('imggen-new');
+
+function openImgGen() {
+  imggenOverlay.classList.remove('imggen-hidden');
+  imggenPrompt.value = '';
+  imggenStatus.textContent = '';
+  imggenResult.style.display = 'none';
+  imggenGenerate.disabled = false;
+  setTimeout(() => imggenPrompt.focus(), 100);
+}
+function closeImgGen() {
+  imggenOverlay.classList.add('imggen-hidden');
+}
+
+imggenCancel.addEventListener('click', closeImgGen);
+imggenOverlay.addEventListener('click', e => {
+  if (e.target === imggenOverlay) closeImgGen();
+});
+
+imggenNew.addEventListener('click', () => {
+  imggenResult.style.display = 'none';
+  imggenStatus.textContent = '';
+  imggenGenerate.disabled = false;
+  imggenPrompt.value = '';
+  imggenPrompt.focus();
+});
+
+imggenDownload.addEventListener('click', () => {
+  const src = imggenImg.src;
+  if (!src) return;
+  const a = document.createElement('a');
+  a.href = src;
+  a.download = `genesis-img-${Date.now()}.png`;
+  a.click();
+});
+
+imggenGenerate.addEventListener('click', async () => {
+  const prompt = imggenPrompt.value.trim();
+  if (!prompt) { imggenPrompt.focus(); return; }
+
+  imggenGenerate.disabled = true;
+  imggenResult.style.display = 'none';
+  imggenStatus.textContent = '⬡ gerando imagem...';
+
+  try {
+    const res = await fetch('/.netlify/functions/imagegen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `Erro ${res.status}`);
+
+    imggenImg.src = `data:${data.mimeType || 'image/png'};base64,${data.imageBase64}`;
+    imggenStatus.textContent = '';
+    imggenResult.style.display = 'flex';
+  } catch (err) {
+    imggenStatus.textContent = `⚠ ${err.message}`;
+    imggenGenerate.disabled = false;
+  }
 });
 </script>
 </body>
