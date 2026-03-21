@@ -858,11 +858,15 @@ H = canvas.height = window.innerHeight;
 CX = W / 2; CY = H / 2;
 RADIUS = Math.min(W, H) * 0.35;
 
+const PANEL_TOTAL = 400 + 24 * 2; // --panel-w + --panel-gap * 2
+
 function resize() {
   W = canvas.width  = window.innerWidth;
   H = canvas.height = window.innerHeight;
-  CX = W / 2; CY = H / 2;
-  RADIUS = Math.min(W, H) * 0.35;
+  const usableW = panelOpen ? W - PANEL_TOTAL : W;
+  CX = usableW / 2;
+  CY = H / 2;
+  RADIUS = Math.min(usableW, H) * 0.35;
 }
 requestAnimationFrame(resize);
 window.addEventListener('resize', resize);
