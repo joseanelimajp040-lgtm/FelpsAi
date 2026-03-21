@@ -370,11 +370,10 @@
   color: rgba(255,255,255,0.2); margin-top: 12px;
 }
 #panel-footer {
-  padding: 7px 20px;
-  border-top: 1px solid rgba(255,255,255,0.05);
-  display: flex; align-items: center;
-  flex-shrink: 0;
-  background: rgba(8,12,24,0.4);
+  padding: 9px 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0; background: rgba(8,12,24,0.5);
 }
 .footer-hint {
   font-size: 9px; font-family: 'Space Mono', monospace;
@@ -388,6 +387,11 @@
   animation: pulse-dot 2.2s ease-in-out infinite;
 }
 .live-dot.active { opacity: 1; }
+#token-count {
+  font-size: 9px; font-family: 'Space Mono', monospace;
+  letter-spacing: 0.1em; color: rgba(130,155,175,0.4);
+}
+#token-count span { color: rgba(93,216,192,0.5); font-weight: 700; }
 .typing-cursor {
   display: inline-block; width: 2px; height: 1em;
   background: #5dd8c0; margin-left: 2px;
@@ -681,11 +685,12 @@
     </div>
 
     <div id="panel-footer">
-  <div class="footer-hint">
-    <div class="live-dot" id="live-dot"></div>
-    <span id="footer-status">sistema pronto</span>
-  </div>
-</div>
+      <div class="footer-hint">
+        <div class="live-dot" id="live-dot"></div>
+        <span id="footer-status">sistema pronto</span>
+      </div>
+      <div id="token-count"></div>
+    </div>
 
   </div>
 </div>
@@ -999,17 +1004,14 @@ let tyTimer = null;
 /* ── RICH TEXT: parser markdown → HTML ── */
 function parseRichText(md) {
   const lines = md.split('\n');
-  let html = '', inList = false, inNumList = false;
+  let html = '', inList = false;
 
   function closeList() {
-    if (inList)    { html += '</ul>'; inList = false; }
-    if (inNumList) { html += '</ol>'; inNumList = false; }
+    if (inList) { html += '</ul>'; inList = false; }
   }
-
   function inline(t) {
     return t
       .replace(/\*\*(.+?)\*\*/g, '<strong class="rt-b">$1</strong>')
-      .replace(/\*(.+?)\*/g,     '<em style="color:rgba(200,220,240,0.7)">$1</em>')
       .replace(/`(.+?)`/g,       '<code class="rt-code">$1</code>')
       .replace(/~~(.+?)~~/g,     '<span class="rt-accent">$1</span>');
   }
@@ -1017,58 +1019,29 @@ function parseRichText(md) {
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) { closeList(); continue; }
-
-    // H1: # Título
-    if (line.startsWith('# ')) {
-      closeList();
-      html += `<div class="rt-h1 rt-animate">${inline(line.slice(2))}</div>`;
-
-    // H2: ## Título
-    } else if (line.startsWith('## ')) {
-      closeList();
-      html += `<div class="rt-h2 rt-animate">${inline(line.slice(3))}</div>`;
-
-    // H3: ### Título → vira h2 menor
-    } else if (line.startsWith('### ')) {
-      closeList();
-      html += `<div class="rt-h3 rt-animate">${inline(line.slice(4))}</div>`;
-
-    // Callout: > texto
-    } else if (line.startsWith('> ')) {
-      closeList();
-      html += `<div class="rt-callout rt-animate">${inline(line.slice(2))}</div>`;
-
-    // Divider: ---
-    } else if (/^---+$/.test(line)) {
-      closeList();
-      html += '<hr class="rt-divider">';
-
-    // Lista com bullet: - item ou • item
-    } else if (/^[-•]\s/.test(line)) {
-      if (inNumList) { html += '</ol>'; inNumList = false; }
+    if      (line.startsWith('# '))  { closeList(); html += `<div class="rt-h1 rt-animate">${inline(line.slice(2))}</div>`; }
+    else if (line.startsWith('## ')) { closeList(); html += `<div class="rt-h2 rt-animate">${inline(line.slice(3))}</div>`; }
+    else if (line.startsWith('> '))  { closeList(); html += `<div class="rt-callout rt-animate">${inline(line.slice(2))}</div>`; }
+    else if (line.startsWith('---')) { closeList(); html += '<hr class="rt-divider">'; }
+    else if (line.startsWith('- ') || line.startsWith('• ')) {
       if (!inList) { html += '<ul class="rt-list rt-animate">'; inList = true; }
       html += `<li>${inline(line.slice(2))}</li>`;
-
-    // Lista numerada: 1. item, 2. item, etc
-    } else if (/^\d+\.\s/.test(line)) {
-      if (inList) { html += '</ul>'; inList = false; }
-      if (!inNumList) { html += '<ol class="rt-list rt-numlist rt-animate">'; inNumList = true; }
-      const content = line.replace(/^\d+\.\s/, '');
-      html += `<li>${inline(content)}</li>`;
-
-    // Parágrafo normal
-    } else {
-      closeList();
-      html += `<p class="rt-p rt-animate">${inline(line)}</p>`;
-    }
+    } else { closeList(); html += `<p class="rt-p rt-animate">${inline(line)}</p>`; }
   }
   closeList();
   return html;
 }
 
+/* ── RICH TEXT: renderiza com digitação bloco a bloco ── */
+const richContent  = document.getElementById('rich-content');
+const liveDotEl    = document.getElementById('live-dot');
+const footerStatus = document.getElementById('footer-status');
+const tokenCountEl = document.getElementById('token-count');
+
 function renderRichReply(md, onDone) {
   richContent.innerHTML = '';
   replyHint.style.display = 'none';
+  tokenCountEl.textContent = '';
   liveDotEl.classList.add('active');
   footerStatus.textContent = 'transmitindo';
 
@@ -1076,49 +1049,7 @@ function renderRichReply(md, onDone) {
   const temp = document.createElement('div');
   temp.innerHTML = html;
   const blocks = Array.from(temp.children);
-  let i = 0;
-
-  function nextBlock() {
-    if (i >= blocks.length) {
-      liveDotEl.classList.remove('active');
-      footerStatus.textContent = 'resposta completa';
-      if (onDone) onDone();
-      return;
-    }
-    const block = blocks[i++];
-    block.style.animationDelay = `${i * 0.05}s`;
-
-    if (block.classList.contains('rt-p')) {
-      typeBlock(block, nextBlock);
-    } else {
-      richContent.appendChild(block);
-      document.getElementById('reply-area').scrollTop = 99999;
-      setTimeout(nextBlock, 60);
-    }
-  }
-
-  function typeBlock(block, cb) {
-    const fullHTML = block.innerHTML;
-    const fullText = block.textContent;
-    const area = document.getElementById('reply-area');
-    richContent.appendChild(block);
-    const cursor = document.createElement('span');
-    cursor.className = 'typing-cursor';
-    block.textContent = '';
-    block.appendChild(cursor);
-    let j = 0;
-    const id = setInterval(() => {
-      if (j < fullText.length) {
-        block.textContent = fullText.slice(0, ++j);
-        block.appendChild(cursor);
-        area.scrollTop = 99999;
-      } else {
-        clearInterval(id);
-        block.innerHTML = fullHTML;
-        setTimeout(cb, 40);
-      }
-    }, 10);
-  }
+  let totalChars = 0, i = 0;
 
   function nextBlock() {
     if (i >= blocks.length) {
@@ -1136,6 +1067,7 @@ function renderRichReply(md, onDone) {
       richContent.appendChild(block);
       document.getElementById('reply-area').scrollTop = 99999;
       totalChars += block.textContent.length;
+      tokenCountEl.innerHTML = `~<span>${Math.round(totalChars * 0.75)}</span> tk`;
       setTimeout(nextBlock, 60);
     }
   }
@@ -1159,6 +1091,7 @@ function renderRichReply(md, onDone) {
         clearInterval(id);
         block.innerHTML = fullHTML; // swap para HTML rico com negrito etc
         totalChars += fullText.length;
+        tokenCountEl.innerHTML = `~<span>${Math.round(totalChars * 0.75)}</span> tk`;
         setTimeout(cb, 40);
       }
     }, 10);
