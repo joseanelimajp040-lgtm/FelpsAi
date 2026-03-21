@@ -119,21 +119,20 @@
 
   /* ── SIDE PANEL ── */
   #neural-panel {
-    position: fixed;
-    top: 0; right: 0; bottom: 0;
-    width: var(--panel-w);
-    z-index: 100;
-    display: flex; flex-direction: column;
-    padding: calc(20px + 64px + 20px) var(--panel-gap) calc(120px + 20px) var(--panel-gap);
-    pointer-events: none;
-
-    /* Hidden state */
-    opacity: 0;
-    transform: translateX(40px);
-    transition:
-      opacity 0.55s cubic-bezier(0.16,1,0.3,1),
-      transform 0.65s cubic-bezier(0.16,1,0.3,1);
-  }
+  position: fixed;
+  top: 0; right: 0;
+  bottom: calc(120px + 20px);
+  width: var(--panel-w);
+  z-index: 100;
+  display: flex; flex-direction: column;
+  padding: calc(20px + 64px + 20px) var(--panel-gap) 0 var(--panel-gap);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(40px);
+  transition:
+    opacity 0.55s cubic-bezier(0.16,1,0.3,1),
+    transform 0.65s cubic-bezier(0.16,1,0.3,1);
+}
   #neural-panel.open {
     opacity: 1;
     transform: translateX(0);
