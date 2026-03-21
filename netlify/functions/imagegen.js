@@ -21,8 +21,8 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Prompt is required' }) };
   }
 
-  // CORREÇÃO: Usando o modelo correto
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
+  // CORREÇÃO: Usando o modelo gratuito atualizado de geração de imagens do Gemini
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent`;
 
   try {
     const response = await fetch(url, {
@@ -31,11 +31,10 @@ exports.handler = async (event) => {
         'Content-Type': 'application/json',
         'x-goog-api-key': GEMINI_API_KEY
       },
+      // Voltamos para a sua estrutura original que funciona perfeitamente com este modelo
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        // DICA: Se você quer que a IA foque 100% na imagem e não gere texto junto,
-        // pode alterar para responseModalities: ['IMAGE']
-        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } 
+        generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
       })
     });
 
@@ -49,6 +48,8 @@ exports.handler = async (event) => {
 
     const data = await response.json();
     const parts = data?.candidates?.[0]?.content?.parts || [];
+    
+    // Procura a parte que contém a imagem na resposta
     const imagePart = parts.find(p => p.inlineData);
     const imageBase64 = imagePart?.inlineData?.data;
     const mimeType = imagePart?.inlineData?.mimeType || 'image/png';
