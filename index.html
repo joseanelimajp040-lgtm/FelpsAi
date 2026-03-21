@@ -859,8 +859,10 @@ CX = W / 2; CY = H / 2;
 RADIUS = Math.min(W, H) * 0.35;
 
 function resize() {
-  W = canvas.width  = window.innerWidth;
-  H = canvas.height = window.innerHeight;
+  const r = wrap.getBoundingClientRect();
+  if (r.width < 50 || r.height < 50) return;
+  W = canvas.width  = r.width;
+  H = canvas.height = r.height;
   CX = W / 2; CY = H / 2;
   RADIUS = Math.min(W, H) * 0.35;
 }
@@ -1060,6 +1062,7 @@ function openPanel() {
   sphereZone.classList.add('panel-open');
   bottomCtrl.classList.add('panel-open');
   if (geminiBadge) geminiBadge.classList.add('panel-open');
+  setTimeout(resize, 700);
 }
 
 function closeNeuralPanel() {
@@ -1069,6 +1072,7 @@ function closeNeuralPanel() {
   sphereZone.classList.remove('panel-open');
   bottomCtrl.classList.remove('panel-open');
   if (geminiBadge) geminiBadge.classList.remove('panel-open');
+  setTimeout(resize, 700);
 }
 
 closePanel.addEventListener('click', closeNeuralPanel);
