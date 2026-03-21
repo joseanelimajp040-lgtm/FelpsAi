@@ -858,15 +858,11 @@ H = canvas.height = window.innerHeight;
 CX = W / 2; CY = H / 2;
 RADIUS = Math.min(W, H) * 0.35;
 
-const PANEL_TOTAL = 400 + 24 * 2; // --panel-w + --panel-gap * 2
-
 function resize() {
   W = canvas.width  = window.innerWidth;
   H = canvas.height = window.innerHeight;
-  const usableW = panelOpen ? W - PANEL_TOTAL : W;
-  CX = usableW / 2;
-  CY = H / 2;
-  RADIUS = Math.min(usableW, H) * 0.35;
+  CX = W / 2; CY = H / 2;
+  RADIUS = Math.min(W, H) * 0.35;
 }
 requestAnimationFrame(resize);
 window.addEventListener('resize', resize);
@@ -1064,7 +1060,6 @@ function openPanel() {
   sphereZone.classList.add('panel-open');
   bottomCtrl.classList.add('panel-open');
   if (geminiBadge) geminiBadge.classList.add('panel-open');
-  setTimeout(resize, 700);
 }
 
 function closeNeuralPanel() {
@@ -1074,7 +1069,6 @@ function closeNeuralPanel() {
   sphereZone.classList.remove('panel-open');
   bottomCtrl.classList.remove('panel-open');
   if (geminiBadge) geminiBadge.classList.remove('panel-open');
-  setTimeout(resize, 700);
 }
 
 closePanel.addEventListener('click', closeNeuralPanel);
