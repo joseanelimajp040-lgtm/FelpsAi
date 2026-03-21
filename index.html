@@ -151,16 +151,16 @@
 #reply-area {
   flex: 1 1 0;
   min-height: 0;
-  overflow-y: auto !important;
+  overflow-y: auto;
   overflow-x: hidden;
   padding: 22px 22px 16px;
   scrollbar-width: thin;
   scrollbar-color: rgba(93,216,192,0.25) transparent;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
 }
 #reply-area > * { flex-shrink: 0; }
+#reply-spacer { flex: 1 1 auto; }
 
 #reply-area::-webkit-scrollbar { width: 4px; }
 #reply-area::-webkit-scrollbar-track { background: transparent; }
@@ -193,16 +193,6 @@
   }
   .panel-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
   .panel-close .material-symbols-outlined { font-size: 16px; }
-
-  #reply-area {
-    flex: 1;
-    padding: 22px 22px 16px;
-    overflow-y: auto;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(93,216,192,0.18) transparent;
-  }
-  #reply-area::-webkit-scrollbar { width: 3px; }
-  #reply-area::-webkit-scrollbar-thumb { background: rgba(93,216,192,0.2); border-radius: 4px; }
 
   #reply-text {
     font-family: 'Playfair Display', Georgia, serif;
@@ -674,6 +664,7 @@
     </div>
 
     <div id="reply-area">
+      <div id="reply-spacer"></div>
       <div class="scan-line"></div>
       <div id="reply-text" style="display:none"></div>
       <div id="rich-content"></div>
