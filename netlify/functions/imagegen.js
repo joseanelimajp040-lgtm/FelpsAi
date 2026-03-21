@@ -21,20 +21,20 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Prompt is required' }) };
   }
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-preview-image-generation:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent`;
 
   try {
     const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { 
-  responseModalities: ['IMAGE', 'TEXT'],
-  temperature: 1
-}
-      })
-    });
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-goog-api-key': GEMINI_API_KEY
+  },
+  body: JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+  })
+});
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
