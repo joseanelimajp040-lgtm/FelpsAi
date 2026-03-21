@@ -156,7 +156,11 @@
   padding: 22px 22px 16px;
   scrollbar-width: thin;
   scrollbar-color: rgba(93,216,192,0.25) transparent;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
+#reply-area > * { flex-shrink: 0; }
 
 #reply-area::-webkit-scrollbar { width: 4px; }
 #reply-area::-webkit-scrollbar-track { background: transparent; }
@@ -317,23 +321,20 @@
 
 #rich-content .rt-h1 {
   font-family: 'DM Serif Display', Georgia, serif;
-  font-size: 24px; font-weight: 400; line-height: 1.25;
-  color: rgba(228,238,248,0.96); margin-bottom: 18px;
-  letter-spacing: -0.01em;
+  font-size: 28px; font-weight: 400; line-height: 1.2;
+  color: rgba(235,245,255,0.97); margin-bottom: 20px;
+  letter-spacing: -0.02em;
 }
 #rich-content .rt-h2 {
-  font-size: 11px; font-weight: 600; text-transform: uppercase;
-  letter-spacing: 0.2em; color: #5dd8c0;
-  margin: 24px 0 10px; display: flex; align-items: center; gap: 8px;
-}
-#rich-content .rt-h2::before {
-  content: ''; display: inline-block;
-  width: 12px; height: 1.5px;
-  background: #5dd8c0; opacity: 0.6; border-radius: 2px; flex-shrink: 0;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.26em; color: #5dd8c0;
+  margin: 26px 0 10px; display: flex; align-items: center; gap: 8px;
 }
 #rich-content .rt-p {
-  font-size: 14px; font-weight: 400; line-height: 1.85;
-  color: rgba(175,200,220,0.8); margin-bottom: 13px;
+  font-size: 15px; font-weight: 400; line-height: 1.9;
+  color: rgba(165,195,215,0.82); margin-bottom: 14px;
+}
+  
 }
 #rich-content .rt-p:last-child { margin-bottom: 0; }
 #rich-content .rt-b     { font-weight: 600; color: rgba(228,238,248,0.95); }
@@ -689,8 +690,6 @@
         <div class="live-dot" id="live-dot"></div>
         <span id="footer-status">sistema pronto</span>
       </div>
-      <div id="token-count"></div>
-    </div>
 
   </div>
 </div>
@@ -1067,7 +1066,6 @@ function renderRichReply(md, onDone) {
       richContent.appendChild(block);
       document.getElementById('reply-area').scrollTop = 99999;
       totalChars += block.textContent.length;
-      tokenCountEl.innerHTML = `~<span>${Math.round(totalChars * 0.75)}</span> tk`;
       setTimeout(nextBlock, 60);
     }
   }
@@ -1091,7 +1089,6 @@ function renderRichReply(md, onDone) {
         clearInterval(id);
         block.innerHTML = fullHTML; // swap para HTML rico com negrito etc
         totalChars += fullText.length;
-        tokenCountEl.innerHTML = `~<span>${Math.round(totalChars * 0.75)}</span> tk`;
         setTimeout(cb, 40);
       }
     }, 10);
