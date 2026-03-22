@@ -1300,6 +1300,147 @@ function renderImageReply(imageBase64, mimeType) {
   liveDotEl.classList.remove('active');
   footerStatus.textContent = 'imagem gerada';
 }
+
+/* ─── LAUNCHER DE SITES ─── */
+const SITE_MAP = {
+  // Buscadores & Google
+  'google':           'https://google.com',
+  'gmail':            'https://mail.google.com',
+  'google drive':     'https://drive.google.com',
+  'google docs':      'https://docs.google.com',
+  'google maps':      'https://maps.google.com',
+  'google tradutor':  'https://translate.google.com',
+  'google fotos':     'https://photos.google.com',
+
+  // Vídeo & Música
+  'youtube':          'https://youtube.com',
+  'netflix':          'https://netflix.com',
+  'spotify':          'https://open.spotify.com',
+  'twitch':           'https://twitch.tv',
+  'disney':           'https://disneyplus.com',
+  'prime video':      'https://primevideo.com',
+
+  // Redes Sociais
+  'instagram':        'https://instagram.com',
+  'twitter':          'https://twitter.com',
+  'x':                'https://x.com',
+  'facebook':         'https://facebook.com',
+  'tiktok':           'https://tiktok.com',
+  'linkedin':         'https://linkedin.com',
+  'pinterest':        'https://pinterest.com',
+  'reddit':           'https://reddit.com',
+
+  // Comunicação
+  'whatsapp':         'https://web.whatsapp.com',
+  'telegram':         'https://web.telegram.org',
+  'discord':          'https://discord.com/app',
+
+  // Dev & Tech
+  'github':           'https://github.com',
+  'stackoverflow':    'https://stackoverflow.com',
+  'chatgpt':          'https://chat.openai.com',
+  'claude':           'https://claude.ai',
+  'figma':            'https://figma.com',
+
+  // Compras
+  'amazon':           'https://amazon.com.br',
+  'mercado livre':    'https://mercadolivre.com.br',
+  'shopee':           'https://shopee.com.br',
+
+  // Notícias & Info
+  'wikipedia':        'https://pt.wikipedia.org',
+  'globo':            'https://globo.com',
+  'uol':              'https://uol.com.br',
+
+  // Produtividade
+  'notion':           'https://notion.so',
+  'trello':           'https://trello.com',
+  'canva':            'https://canva.com',
+  'outlook':          'https://outlook.com',
+};
+
+function detectLaunchCommand(text) {
+  const t = text.toLowerCase().trim();
+
+  // Padrões: "abra o X", "abre o X", "abrir X", "vai para X", "acesse X", "abre X"
+  const patterns = [
+    /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+)$/i,
+    /^(?:vai\s+para?|acesse?|entre\s+no?|abre\s+o)\s+(.+)$/i,
+    /^(?:open|launch)\s+(.+)$/i,
+  ];
+
+  for (const pat of patterns) {
+    const m = t.match(pat);
+    if (m) {
+      const target = m[1].trim().replace(/[!?.]+$/, '');
+
+      // Busca exata no mapa
+      if (SITE_MAP[target]) return SITE_MAP[target];
+
+      // Busca parcial (ex: "googl" → "google")
+      for (const key of Object.keys(SITE_MAP)) {
+        if (key.includes(target) || target.includes(key)) {
+          return SITE_MAP[key];
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function renderLaunchReply(siteName, url) {
+  richContent.innerHTML = '';
+  replyHint.style.display = 'none';
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;animation:fadeUp .4s cubic-bezier(.16,1,.3,1) both';
+
+  const label = document.createElement('div');
+  label.innerHTML = `<span class="rt-h2" style="margin:0">
+    <span class="material-symbols-outlined" style="font-size:14px">open_in_new</span>
+    Abrindo site
+  </span>`;
+
+  const card = document.createElement('div');
+  card.style.cssText = [
+    'background:rgba(93,216,192,0.06)',
+    'border:1px solid rgba(93,216,192,0.2)',
+    'border-radius:14px',
+    'padding:16px 18px',
+    'display:flex',
+    'align-items:center',
+    'justify-content:space-between',
+    'gap:12px',
+  ].join(';');
+
+  card.innerHTML = `
+    <div>
+      <div style="font-size:14px;font-weight:600;color:rgba(230,245,255,.9);margin-bottom:3px">${siteName}</div>
+      <div style="font-size:11px;font-family:'Space Mono',monospace;color:rgba(93,216,192,.55)">${url}</div>
+    </div>
+    <a href="${url}" target="_blank" rel="noopener" style="
+      padding:9px 18px;border-radius:10px;
+      background:var(--accent);color:#03050a;
+      font-size:12px;font-weight:600;font-family:'Inter',sans-serif;
+      text-decoration:none;white-space:nowrap;
+      display:flex;align-items:center;gap:6px;
+      transition:background .2s;flex-shrink:0
+    " onmouseover="this.style.background='#73ecd4'" onmouseout="this.style.background='var(--accent)'">
+      <span class="material-symbols-outlined" style="font-size:15px">open_in_new</span>
+      Abrir
+    </a>
+  `;
+
+  wrap.appendChild(label);
+  wrap.appendChild(card);
+  richContent.appendChild(wrap);
+
+  liveDotEl.classList.remove('active');
+  footerStatus.textContent = 'site localizado';
+
+  // Abre automaticamente após 600ms
+  setTimeout(() => window.open(url, '_blank', 'noopener'), 600);
+}
   
 sendBtn.addEventListener('click', async () => {
   const txt = msgInput.value.trim();
@@ -1321,6 +1462,18 @@ sendBtn.addEventListener('click', async () => {
   replyHint.textContent = imageToSend ? 'Analisando imagem...' : 'Consultando núcleo...';
   sendBtn.disabled = true;
   requestAnimationFrame(() => openPanel());
+
+  // ── LAUNCHER: detecta antes de ir ao Gemini ──
+  const launchUrl = detectLaunchCommand(txt);
+  if (launchUrl && !imageToSend) {
+    const siteName = txt.replace(/^(abr[ae](?:ir)?\s+(?:o\s+|a\s+)?|vai\s+para?\s+|acesse?\s+)/i, '').trim();
+    openPanel();
+    setState('responding');
+    renderLaunchReply(siteName, launchUrl);
+    saveToHistory(txt, `[site aberto: ${launchUrl}]`);
+    setTimeout(() => { setState('idle'); sendBtn.disabled = false; }, 1000);
+    return; // para aqui, não vai ao Gemini
+  }
 
  try {
     if (isImageRequest(txt) && !imageToSend) {
