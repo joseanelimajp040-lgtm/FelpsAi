@@ -1871,5 +1871,212 @@ imggenGenerate.addEventListener('click', async () => {
   }
 });
 </script>
+<!-- ── WAKE WORD SYSTEM ── -->
+<script>
+(function () {
+  /* ── CONFIG ── */
+  const WAKE_WORDS  = ['gênesis', 'genesis', 'geneses', 'ênis']; // variações fonéticas
+  const WAKE_LANG   = 'pt-BR';
+
+  /* ── ESTADO ── */
+  let wakeRec       = null;
+  let wakeActive    = false;
+  let wakeRestart   = null;
+  let wakeSuppressed = false; // true enquanto o mic principal está rodando
+
+  /* ── TOAST DE FEEDBACK ── */
+  const toast = document.createElement('div');
+  toast.id = 'wake-toast';
+  Object.assign(toast.style, {
+    position: 'fixed', bottom: '110px', left: '50%',
+    transform: 'translateX(-50%) translateY(12px)',
+    background: 'rgba(93,216,192,0.12)',
+    border: '1px solid rgba(93,216,192,0.35)',
+    backdropFilter: 'blur(14px)',
+    color: '#5dd8c0', fontFamily: "'Space Mono', monospace",
+    fontSize: '11px', letterSpacing: '0.18em', textTransform: 'uppercase',
+    padding: '9px 22px', borderRadius: '100px', zIndex: '9999',
+    pointerEvents: 'none', opacity: '0',
+    transition: 'opacity 0.3s, transform 0.3s',
+    whiteSpace: 'nowrap',
+  });
+  document.body.appendChild(toast);
+
+  let toastTimer;
+  function showToast(msg, durationMs = 2200) {
+    clearTimeout(toastTimer);
+    toast.textContent = msg;
+    toast.style.opacity  = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+    toastTimer = setTimeout(() => {
+      toast.style.opacity  = '0';
+      toast.style.transform = 'translateX(-50%) translateY(12px)';
+    }, durationMs);
+  }
+
+  /* ── INDICADOR ALWAYS-ON no topbar ── */
+  const wakeIndicator = document.createElement('div');
+  wakeIndicator.id = 'wake-indicator';
+  Object.assign(wakeIndicator.style, {
+    display: 'flex', alignItems: 'center', gap: '7px',
+    fontSize: '9px', fontFamily: "'Space Mono', monospace",
+    letterSpacing: '0.16em', textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.22)', cursor: 'default',
+  });
+  wakeIndicator.innerHTML = `
+    <div id="wake-dot" style="
+      width:6px;height:6px;border-radius:50%;
+      background:#5dd8c0;opacity:0.35;flex-shrink:0;
+      transition:opacity 0.3s,box-shadow 0.3s;
+    "></div>
+    <span id="wake-label">escuta passiva</span>
+  `;
+  // Insere no topbar, antes do state-tag
+  const stateTagEl = document.getElementById('state-tag');
+  stateTagEl.parentNode.insertBefore(wakeIndicator, stateTagEl);
+
+  const wakeDot   = document.getElementById('wake-dot');
+  const wakeLabel = document.getElementById('wake-label');
+
+  function setWakeDotState(state) {
+    // state: 'listening' | 'off' | 'detected'
+    if (state === 'listening') {
+      wakeDot.style.opacity   = '0.45';
+      wakeDot.style.boxShadow = '0 0 8px rgba(93,216,192,0.4)';
+      wakeLabel.textContent   = 'escuta passiva';
+    } else if (state === 'detected') {
+      wakeDot.style.opacity   = '1';
+      wakeDot.style.boxShadow = '0 0 14px rgba(93,216,192,0.9)';
+      wakeLabel.textContent   = 'wake word!';
+    } else {
+      wakeDot.style.opacity   = '0.15';
+      wakeDot.style.boxShadow = 'none';
+      wakeLabel.textContent   = 'escuta pausada';
+    }
+  }
+
+  /* ── SPEECH RECOGNITION para wake word ── */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    wakeLabel.textContent = 'sem suporte';
+    console.warn('[Wake Word] SpeechRecognition não suportado.');
+    return;
+  }
+
+  function buildRec() {
+    const r = new SR();
+    r.lang             = WAKE_LANG;
+    r.continuous       = true;
+    r.interimResults   = true;
+    r.maxAlternatives  = 3;
+
+    r.onresult = (e) => {
+      if (wakeSuppressed) return;
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        // Checa todas as alternativas
+        for (let a = 0; a < e.results[i].length; a++) {
+          const t = e.results[i][a].transcript.toLowerCase().normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, ''); // remove acentos para comparar
+          if (WAKE_WORDS.some(w => {
+            const wn = w.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            return t.includes(wn);
+          })) {
+            onWakeWordDetected();
+            return;
+          }
+        }
+      }
+    };
+
+    r.onerror = (e) => {
+      if (['no-speech', 'aborted'].includes(e.error)) return;
+      scheduleRestart(1200);
+    };
+
+    r.onend = () => {
+      if (!wakeActive || wakeSuppressed) return;
+      scheduleRestart(400);
+    };
+
+    return r;
+  }
+
+  function scheduleRestart(delay) {
+    clearTimeout(wakeRestart);
+    wakeRestart = setTimeout(() => {
+      if (!wakeActive || wakeSuppressed) return;
+      try { wakeRec = buildRec(); wakeRec.start(); setWakeDotState('listening'); }
+      catch (err) { scheduleRestart(800); }
+    }, delay);
+  }
+
+  function startWake() {
+    if (wakeActive) return;
+    wakeActive = true;
+    try { wakeRec = buildRec(); wakeRec.start(); setWakeDotState('listening'); }
+    catch (err) { scheduleRestart(600); }
+  }
+
+  function pauseWake() {
+    wakeSuppressed = true;
+    clearTimeout(wakeRestart);
+    setWakeDotState('off');
+    try { wakeRec?.stop(); } catch (_) {}
+  }
+
+  function resumeWake() {
+    wakeSuppressed = false;
+    scheduleRestart(600);
+  }
+
+  /* ── DETECÇÃO ── */
+  function onWakeWordDetected() {
+    setWakeDotState('detected');
+    showToast('⬡  gênesis ativada', 1800);
+
+    // Pausa wake word (não pode ter 2 reconhecimentos ao mesmo tempo)
+    pauseWake();
+
+    // Aciona o microfone principal (função já existente no app)
+    setTimeout(() => {
+      if (typeof startListening === 'function' && !isListening && STATE === 'idle') {
+        startListening();
+      }
+    }, 300);
+  }
+
+  /* ── INTERCEPTA o stopListening original para reativar wake word depois ── */
+  const _origStop = window.stopListening;
+  window.stopListening = function (autoSend) {
+    if (typeof _origStop === 'function') _origStop(autoSend);
+    // Reativa escuta passiva após o mic principal terminar
+    setTimeout(() => {
+      resumeWake();
+      setWakeDotState('listening');
+    }, 1200);
+  };
+
+  /* ── PAGE VISIBILITY: reativa ao voltar para a aba ── */
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wakeActive && !wakeSuppressed) {
+      scheduleRestart(500);
+    }
+  });
+
+  /* ── INICIA automaticamente ── */
+  // Aguarda interação do usuário (exigência do browser para microfone)
+  let started = false;
+  function tryStart() {
+    if (started) return;
+    started = true;
+    startWake();
+    document.removeEventListener('click', tryStart);
+    document.removeEventListener('keydown', tryStart);
+  }
+  document.addEventListener('click',   tryStart);
+  document.addEventListener('keydown', tryStart);
+
+})();
+</script>
 </body>
 </html>
