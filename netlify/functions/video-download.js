@@ -1,6 +1,6 @@
-/* ── video-download.js ────────────────────────────────────────────────────────
+/* ── video-download.js (v7 — Instâncias Comunitárias do Cobalt) ─────────
    Recebe { url, quality } → retorna { url } de download direto
-   Usa Y2Mate para o YouTube (Garante áudio+vídeo até 1080p).
+   Faz requisição via POST API v10 para servidores com uptime alto.
 ──────────────────────────────────────────────────────────────────────── */
 exports.handler = async (event) => {
   const headers = {
@@ -18,80 +18,69 @@ exports.handler = async (event) => {
     const isAudio = /mp3|áudio|audio/i.test(quality || '');
 
     /* ══════════════════════════
-       YOUTUBE (Via Y2Mate)
+       YOUTUBE (Via Cobalt Community API v10)
        ══════════════════════════ */
     if (/youtube\.com|youtu\.be/.test(url)) {
       
-      // 1. Analisa a URL para pegar os Tokens de Conversão (vid e k)
-      const formData = new URLSearchParams();
-      formData.append('k_query', url);
-      formData.append('k_page', 'home');
-      formData.append('hl', 'pt');
-      formData.append('q_auto', '1');
+      // Lista de servidores públicos gratuitos do Cobalt (Sistema de Fallback)
+      const cobaltInstances = [
+        'https://cobalt.api.timelessnesses.me',
+        'https://api.cobalt.my.id',
+        'https://co.tskau.team',
+        'https://cobalt.synzr.space'
+      ];
 
-      const resInfo = await fetch('https://www.y2mate.com/mates/analyzeV2/ajax', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-        },
-        body: formData.toString(),
-        signal: AbortSignal.timeout(15000)
-      });
-      const dataInfo = await resInfo.json();
-      if (dataInfo.status !== 'ok') throw new Error('Erro ao processar vídeo no servidor.');
+      const ql = quality ? quality.replace('p', '') : '1080';
+      
+      const payload = isAudio ? {
+        url: url,
+        isAudioOnly: true,
+        audioFormat: "mp3"
+      } : {
+        url: url,
+        videoQuality: ql
+      };
 
-      const vid = dataInfo.vid;
-      let kToken = null;
+      let dlUrl = null;
+      let lastErrorMsg = 'Todos os servidores falharam.';
 
-      // 2. Procura a qualidade solicitada para pegar o token correto
-      if (isAudio) {
-        const mp3Links = Object.values(dataInfo.links?.mp3 || {});
-        if (mp3Links.length > 0) kToken = mp3Links[0].k; // Pega o melhor MP3
-      } else {
-        const mp4Links = Object.values(dataInfo.links?.mp4 || {});
-        // Tenta achar a qualidade exata (ex: "1080p")
-        let match = mp4Links.find(f => f.q === quality);
-        
-        // Fallback: se não achar exato, busca parcial (ex: "1080")
-        if (!match) {
-          const ql = quality?.replace('p', '') || '720';
-          match = mp4Links.find(f => f.q.includes(ql));
+      // Tenta baixar em cada servidor da lista até um dar certo
+      for (const api of cobaltInstances) {
+        try {
+          const res = await fetch(api, {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(15000)
+          });
+
+          const data = await res.json();
+
+          // A API v10 do Cobalt retorna um desses status quando dá certo
+          if (data.status === 'redirect' || data.status === 'stream' || data.status === 'tunnel') {
+            dlUrl = data.url;
+            break; // Deu certo, encerra o loop de tentativas
+          } else if (data.status === 'error') {
+             lastErrorMsg = data.text || 'Erro retornado pela API do Cobalt.';
+          }
+        } catch (err) {
+          lastErrorMsg = err.message;
+          continue; // Falhou por timeout ou rede, tenta o próximo servidor da array
         }
-        
-        // Último Fallback: Pega a melhor qualidade disponível
-        if (!match && mp4Links.length > 0) match = mp4Links[0];
-        
-        if (match) kToken = match.k;
       }
 
-      if (!kToken) throw new Error('Formato ou qualidade selecionada indisponível no momento.');
-
-      // 3. Converte o token no Link Final de Download
-      const convertData = new URLSearchParams();
-      convertData.append('vid', vid);
-      convertData.append('k', kToken);
-
-      const resConvert = await fetch('https://www.y2mate.com/mates/convertV2/index', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-        },
-        body: convertData.toString(),
-        signal: AbortSignal.timeout(15000)
-      });
-      const dataConvert = await resConvert.json();
-
-      if (dataConvert.status !== 'ok' || !dataConvert.dlink) {
-        throw new Error('Falha ao gerar o arquivo de download final.');
+      if (!dlUrl) {
+        throw new Error(`Servidores de vídeo indisponíveis no momento. Detalhe: ${lastErrorMsg}`);
       }
 
-      return { statusCode: 200, headers, body: JSON.stringify({ url: dataConvert.dlink }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ url: dlUrl }) };
     }
 
     /* ══════════════════════════
-       TIKTOK (Mantido Original)
+       TIKTOK (Mantido no tikwm.com)
        ══════════════════════════ */
     if (/tiktok\.com/.test(url)) {
       const res = await fetch('https://www.tikwm.com/api/', {
@@ -117,7 +106,7 @@ exports.handler = async (event) => {
     }
 
     /* ══════════════════════════
-       OUTROS (Mantido Original)
+       OUTROS (Mantido via RapidAPI original)
        ══════════════════════════ */
     if (!rapidKey) throw new Error('RAPIDAPI_KEY não configurada para processar esta rede social.');
     const res = await fetch(
@@ -146,7 +135,7 @@ exports.handler = async (event) => {
 
   } catch (err) {
     return {
-      statusCode: 500,
+      statusCode: 400, // <--- Mantém o 400 para o frontend do main.js capturar corretamente
       headers,
       body: JSON.stringify({ error: err.message }),
     };
