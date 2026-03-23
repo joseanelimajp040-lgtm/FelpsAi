@@ -1,10 +1,11 @@
 [build]
   functions = "netlify/functions"
 
+[functions]
+  timeout = 26
+
 [[headers]]
   for = "/*"
   [headers.values]
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
-    [functions]
-  timeout = 26
