@@ -1,4 +1,4 @@
-/* ── video-info.js — aponta para servidor Railway ── */
+/* ── video-info.js — versão simples (o frontend já acordou o servidor) ── */
 
 exports.handler = async (event) => {
   const headers = {
@@ -15,9 +15,17 @@ exports.handler = async (event) => {
     if (!SERVER) throw new Error('VIDEO_SERVER_URL não configurada no Netlify.');
 
     const res  = await fetch(`${SERVER}/info?url=${encodeURIComponent(url)}`, {
-      signal: AbortSignal.timeout(35000),
+      signal: AbortSignal.timeout(9000), // abaixo do limite do Netlify
     });
-    const data = await res.json();
+
+    const text = await res.text();
+
+    /* Servidor ainda acordando — retorna erro amigável */
+    if (text.trim().startsWith('<')) {
+      throw new Error('Servidor iniciando, aguarde alguns segundos e tente novamente.');
+    }
+
+    const data = JSON.parse(text);
     if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
 
     return { statusCode: 200, headers, body: JSON.stringify(data) };
