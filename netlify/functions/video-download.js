@@ -1,6 +1,7 @@
-/* ── video-download.js (v9 — ytdl-core + Y2Mate HD fallback) ──────────────
+/* ── video-download.js (v10 — Y2Mate primário + Invidious fallback, sem ytdl-core) ──
    Recebe { url, quality } → retorna { url } de download direto
-────────────────────────────────────────────────────────────────────────── */
+   Nenhuma dependência npm nova necessária — apenas fetch nativo
+────────────────────────────────────────────────────────────────────────────────────── */
 exports.handler = async (event) => {
   const headers = {
     'Content-Type': 'application/json',
@@ -15,134 +16,172 @@ exports.handler = async (event) => {
     const rapidKey = process.env.RAPIDAPI_KEY;
     const isAudio  = /mp3|áudio|audio/i.test(quality || '');
 
-    /* ══════════════════════════════════════════════════════════════════
-       YOUTUBE — @distube/ytdl-core (muxed ≤360p) + Y2Mate (HD fallback)
-       ══════════════════════════════════════════════════════════════════ */
+    /* ══════════════════════════════════════════════════════════════════════
+       YOUTUBE — Y2Mate (primário, merge servidor deles) + Invidious (fallback)
+       Sem ytdl-core, sem npm, sem bot detection.
+       ══════════════════════════════════════════════════════════════════════ */
     if (/youtube\.com|youtu\.be/.test(url)) {
-      const ytdl = require('@distube/ytdl-core');
 
-      /* ── Extrai o video ID ── */
+      /* Extrai o video ID */
       const videoId =
         url.match(/[?&]v=([^&#]+)/)?.[1] ||
         url.match(/youtu\.be\/([^?#]+)/)?.[1];
 
-      /* ── Obtém todos os formatos ── */
-      const info = await ytdl.getInfo(url, {
-        requestOptions: {
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          },
-        },
-      });
-
-      /* ── ÁUDIO (MP3) ── */
-      if (isAudio) {
-        const af = ytdl
-          .filterFormats(info.formats, 'audioonly')
-          .sort((a, b) => (b.audioBitrate || 0) - (a.audioBitrate || 0));
-        if (!af[0]?.url) throw new Error('Formato de áudio não encontrado.');
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({ url: af[0].url }),
-        };
-      }
+      if (!videoId) throw new Error('ID do vídeo não encontrado na URL.');
 
       const targetH = parseInt(quality) || 360;
 
-      /* ── MUXED (áudio+vídeo juntos) — YouTube oferece até ~360p ── */
-      const muxed = ytdl
-        .filterFormats(info.formats, 'audioandvideo')
-        .sort((a, b) => (b.height || 0) - (a.height || 0));
-
-      // Para qualidades ≤ 360p: retorna URL direta (instantâneo, sem timeout)
-      if (targetH <= 360) {
-        const f =
-          muxed.find((m) => (m.height || 0) <= targetH) ||
-          muxed[muxed.length - 1];
-        if (f?.url)
-          return {
-            statusCode: 200,
-            headers,
-            body: JSON.stringify({ url: f.url }),
-          };
-      }
-
-      /* ── HD (480p / 720p / 1080p) — Y2Mate faz o merge no servidor deles ── */
-      if (videoId) {
-        try {
-          // Passo 1: análise
-          const a1Res = await fetch(
-            'https://www.y2mate.com/mates/en7/analyzeV2/ajax',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                Origin: 'https://www.y2mate.com',
-                Referer: 'https://www.y2mate.com/',
-              },
-              body: `k_query=${encodeURIComponent(url)}&k_page=home&hl=en&q_auto=0`,
-              signal: AbortSignal.timeout(9000),
-            }
-          );
-          const d1 = await a1Res.json();
-          const mp4Links = d1?.links?.mp4 || {};
-
-          // Escolhe a melhor qualidade disponível no Y2Mate
-          const preferred = [`${targetH}p`, '720p', '480p', '360p'];
-          let qKey = null;
-          for (const q of preferred) {
-            if (mp4Links[q]?.k) { qKey = mp4Links[q].k; break; }
+      /* ── CAMINHO 1: Y2Mate (funciona para todas as qualidades com áudio embutido) ── */
+      try {
+        /* Passo 1 — Análise: descobre as chaves de cada qualidade */
+        const analyzeRes = await fetch(
+          'https://www.y2mate.com/mates/en7/analyzeV2/ajax',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              Origin:  'https://www.y2mate.com',
+              Referer: 'https://www.y2mate.com/',
+            },
+            body: `k_query=${encodeURIComponent(url)}&k_page=home&hl=en&q_auto=0`,
+            signal: AbortSignal.timeout(12000),
           }
-          // Fallback: qualquer qualidade disponível
-          if (!qKey) qKey = Object.values(mp4Links)[0]?.k;
-          if (!qKey) throw new Error('Y2Mate: qualidade não disponível.');
+        );
 
-          // Passo 2: conversão
-          const a2Res = await fetch(
-            'https://www.y2mate.com/mates/en7/convertV2/index',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                Origin: 'https://www.y2mate.com',
-                Referer: 'https://www.y2mate.com/',
-              },
-              body: `vid=${videoId}&k=${qKey}`,
-              signal: AbortSignal.timeout(12000),
-            }
-          );
-          const d2 = await a2Res.json();
-          if (!d2?.dlink) throw new Error('Y2Mate: link de download não gerado.');
+        if (!analyzeRes.ok) throw new Error(`Y2Mate analyze: HTTP ${analyzeRes.status}`);
+        const d1 = await analyzeRes.json();
 
+        let qKey = null;
+
+        if (isAudio) {
+          /* Áudio: pega 128kbps ou o primeiro disponível */
+          const mp3 = d1?.links?.mp3 || {};
+          qKey =
+            mp3['mp3128']?.k ||
+            mp3['mp3192']?.k ||
+            Object.values(mp3).find((v) => v?.k)?.k;
+        } else {
+          /* Vídeo: tenta qualidade solicitada, depois desce até encontrar uma disponível */
+          const mp4 = d1?.links?.mp4 || {};
+          const fallbackOrder = [
+            `${targetH}p`,
+            '1080p', '720p', '480p', '360p', '240p', '144p',
+          ];
+          for (const q of fallbackOrder) {
+            if (mp4[q]?.k) { qKey = mp4[q].k; break; }
+          }
+          /* Último recurso: qualquer chave disponível */
+          if (!qKey) qKey = Object.values(mp4).find((v) => v?.k)?.k;
+        }
+
+        if (!qKey) throw new Error('Y2Mate: nenhuma qualidade disponível para este vídeo.');
+
+        /* Passo 2 — Conversão: gera o link final de download */
+        const convertRes = await fetch(
+          'https://www.y2mate.com/mates/en7/convertV2/index',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              Origin:  'https://www.y2mate.com',
+              Referer: 'https://www.y2mate.com/',
+            },
+            body: `vid=${videoId}&k=${qKey}`,
+            signal: AbortSignal.timeout(15000),
+          }
+        );
+
+        if (!convertRes.ok) throw new Error(`Y2Mate convert: HTTP ${convertRes.status}`);
+        const d2 = await convertRes.json();
+
+        if (d2?.dlink) {
           return {
             statusCode: 200,
             headers,
             body: JSON.stringify({ url: d2.dlink }),
           };
+        }
+        throw new Error('Y2Mate: link de download não retornado.');
 
-        } catch (y2Err) {
-          // Fallback silencioso: melhor muxed disponível (com áudio garantido)
-          if (muxed[0]?.url) {
+      } catch (y2Err) {
+        /* Y2Mate falhou → tenta Invidious (retorna streams muxed até 720p) */
+        console.log('[YouTube] Y2Mate falhou:', y2Err.message, '— tentando Invidious...');
+      }
+
+      /* ── CAMINHO 2: Invidious (fallback — muxed até 720p, sem ffmpeg, sem bot detection) ── */
+      const INVIDIOUS = [
+        'https://invidious.privacyredirect.com',
+        'https://invidious.nerdvpn.de',
+        'https://inv.nadeko.net',
+        'https://yt.cdaut.de',
+        'https://invidious.fdn.fr',
+      ];
+
+      for (const instance of INVIDIOUS) {
+        try {
+          const ivRes = await fetch(
+            `${instance}/api/v1/videos/${videoId}`,
+            {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+              },
+              signal: AbortSignal.timeout(8000),
+            }
+          );
+          if (!ivRes.ok) continue;
+          const iv = await ivRes.json();
+
+          if (isAudio) {
+            /* Melhor stream de áudio disponível */
+            const af = (iv.adaptiveFormats || [])
+              .filter((f) => f.type?.startsWith('audio'))
+              .sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0));
+            if (af[0]?.url) {
+              return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({ url: af[0].url }),
+              };
+            }
+            continue;
+          }
+
+          /* formatStreams = muxed (áudio+vídeo juntos), normalmente até 720p */
+          const muxed = (iv.formatStreams || []).sort(
+            (a, b) => (b.height || 0) - (a.height || 0)
+          );
+
+          /* Tenta encontrar a qualidade solicitada ou inferior */
+          const match =
+            muxed.find((f) => (f.height || 0) <= targetH) ||
+            muxed[muxed.length - 1];
+
+          if (match?.url) {
             return {
               statusCode: 200,
               headers,
               body: JSON.stringify({
-                url: muxed[0].url,
-                note: `HD indisponível agora — retornando ${muxed[0].height}p (áudio incluído)`,
+                url: match.url,
+                note:
+                  (match.height || 0) < targetH
+                    ? `${targetH}p indisponível — retornando ${match.height || '?'}p (áudio incluído)`
+                    : undefined,
               }),
             };
           }
-          throw new Error(
-            `HD não processado: ${y2Err.message}. Tente 360p para download garantido.`
-          );
+        } catch {
+          /* Instância offline — tenta a próxima */
+          continue;
         }
       }
 
-      throw new Error('Não foi possível processar este vídeo do YouTube.');
+      throw new Error(
+        'Não foi possível processar este vídeo agora. Tente novamente em alguns segundos.'
+      );
     }
 
     /* ══════════════════════════════════════════════════════════════════
