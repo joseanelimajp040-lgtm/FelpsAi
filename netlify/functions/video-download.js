@@ -1,43 +1,10 @@
-/* ── video-download.js (v3 — multi-instância com fallback) ─────────────────
-   Tenta cada instância pública do cobalt em sequência até uma funcionar.
-   Sem chave de API necessária.
+/* ── video-download.js (v5 — ytdl-core, sem chave de API) ──────────────────
+   YouTube: retorna URL de stream direto via @distube/ytdl-core
+   Outros:  retorna URL via RapidAPI Social Downloader (chave gratuita)
+            Configure RAPIDAPI_KEY nas env vars do Netlify (opcional,
+            só necessário para TikTok/Instagram/Facebook/Twitter)
    ──────────────────────────────────────────────────────────────────────── */
-
-const COBALT_INSTANCES = [
-  'https://cobalt.tools/',
-  'https://co.wuk.sh/',
-  'https://cobalt.imput.net/',
-  'https://cobalt.api.losttttt.xyz/',
-  'https://api.cobalt.tools/',
-];
-
-async function tryCobalt(instance, body) {
-  const res = await fetch(instance, {
-    method: 'POST',
-    headers: {
-      'Accept':       'application/json',
-      'Content-Type': 'application/json',
-      'User-Agent':   'Mozilla/5.0 (compatible; GenesisBot/1.0)',
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(12000), // 12s timeout por instância
-  });
-
-  const data = await res.json();
-
-  if (data.status === 'error' || data.error) {
-    const msg = data?.error?.code || data?.error?.message || JSON.stringify(data.error);
-    throw new Error(msg);
-  }
-
-  const downloadUrl =
-    data.url ||
-    (Array.isArray(data.picker) ? data.picker[0]?.url : null);
-
-  if (!downloadUrl) throw new Error('Sem URL na resposta.');
-
-  return downloadUrl;
-}
+const ytdl = require('@distube/ytdl-core');
 
 exports.handler = async (event) => {
   const headers = {
@@ -45,48 +12,95 @@ exports.handler = async (event) => {
     'Access-Control-Allow-Origin': '*',
   };
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers };
-  }
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers };
 
   try {
     const { url, quality } = JSON.parse(event.body || '{}');
     if (!url) throw new Error('URL não informada.');
 
     const isAudio = /mp3|áudio|audio/i.test(quality || '');
-    const qualityMap = {
-      '1080p': '1080', '720p': '720', '480p': '480', '360p': '360',
-      'melhor qualidade': 'max',
-    };
-    const vQuality = qualityMap[(quality || '').toLowerCase()] || '720';
 
-    const cobaltBody = {
-      url,
-      downloadMode:  isAudio ? 'audio'  : 'auto',
-      quality:       isAudio ? undefined : vQuality,
-      audioFormat:   isAudio ? 'mp3'    : 'best',
-      filenameStyle: 'basic',
-    };
+    /* ══════════════════════════════════════
+       YOUTUBE — ytdl-core (sem chave)
+       ══════════════════════════════════════ */
+    if (ytdl.validateURL(url)) {
+      const info = await ytdl.getInfo(url);
 
-    let lastError = 'Todas as instâncias falharam.';
-
-    for (const instance of COBALT_INSTANCES) {
-      try {
-        console.log(`[cobalt] tentando: ${instance}`);
-        const downloadUrl = await tryCobalt(instance, cobaltBody);
-        console.log(`[cobalt] sucesso em: ${instance}`);
-        return {
-          statusCode: 200,
-          headers,
-          body: JSON.stringify({ url: downloadUrl }),
+      let format;
+      if (isAudio) {
+        format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
+      } else {
+        const qualityMap = {
+          '1080p': '137', '720p': '22', '480p': '135', '360p': '18',
+          'melhor qualidade': 'highestvideo',
         };
-      } catch (err) {
-        console.warn(`[cobalt] falhou em ${instance}: ${err.message}`);
-        lastError = err.message;
+        const qtKey = (quality || '').toLowerCase();
+        const qtValue = qualityMap[qtKey] || '22'; // padrão 720p
+
+        try {
+          // Tenta vídeo+áudio na qualidade pedida
+          format = ytdl.chooseFormat(info.formats, {
+            quality: qtValue,
+            filter: 'videoandaudio',
+          });
+        } catch (_) {
+          // Fallback: melhor qualidade disponível com áudio
+          format = ytdl.chooseFormat(info.formats, {
+            quality: 'highestvideo',
+            filter: 'videoandaudio',
+          });
+        }
       }
+
+      if (!format?.url) throw new Error('Formato não encontrado para esta qualidade.');
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({ url: format.url }),
+      };
     }
 
-    throw new Error(`Nenhuma instância disponível. Último erro: ${lastError}`);
+    /* ══════════════════════════════════════
+       OUTRAS PLATAFORMAS — RapidAPI
+       (TikTok, Instagram, Twitter, Facebook)
+       ══════════════════════════════════════ */
+    const rapidKey = process.env.RAPIDAPI_KEY;
+    if (!rapidKey) {
+      throw new Error(
+        'Para baixar vídeos de TikTok/Instagram/Facebook, adicione RAPIDAPI_KEY ' +
+        'nas variáveis de ambiente do Netlify. A chave é gratuita em rapidapi.com ' +
+        '(busque por "Social Media Video Downloader").'
+      );
+    }
+
+    const rapidRes = await fetch(
+      `https://social-media-video-downloader.p.rapidapi.com/smvd/get/all?url=${encodeURIComponent(url)}`,
+      {
+        headers: {
+          'X-RapidAPI-Key':  rapidKey,
+          'X-RapidAPI-Host': 'social-media-video-downloader.p.rapidapi.com',
+        },
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+
+    const rapidData = await rapidRes.json();
+    if (!rapidRes.ok || !rapidData.links?.length) {
+      throw new Error('Não foi possível obter o link de download para esta plataforma.');
+    }
+
+    // Pega o link de melhor qualidade ou MP3 se pedido
+    const links = rapidData.links;
+    let chosen = isAudio
+      ? links.find(l => /mp3|audio/i.test(l.quality)) || links[0]
+      : links.find(l => /mp4|720|1080|best/i.test(l.quality)) || links[0];
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ url: chosen.link || chosen.url }),
+    };
 
   } catch (err) {
     return {
