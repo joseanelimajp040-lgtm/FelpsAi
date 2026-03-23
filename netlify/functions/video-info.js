@@ -1,6 +1,5 @@
-/* ── video-info.js (v5 — oEmbed + Cobalt Settings) ────────────────────────
+/* ── video-info.js (v5 — oEmbed + Qualidades Fixas) ───────────────────────
    Recebe { url } → retorna { title, platform, qualities }
-   Usa oEmbed oficial do YouTube para não sofrer bloqueio de IP.
 ──────────────────────────────────────────────────────────────────────── */
 exports.handler = async (event) => {
   const headers = {
@@ -14,7 +13,6 @@ exports.handler = async (event) => {
     const { url } = JSON.parse(event.body || '{}');
     if (!url) throw new Error('URL não informada.');
 
-    const rapidKey = process.env.RAPIDAPI_KEY;
     let title = 'Vídeo';
     let platform = 'Web';
     let qualities = [];
@@ -28,14 +26,12 @@ exports.handler = async (event) => {
         if (oembedRes.ok) {
           const oembedData = await oembedRes.json();
           title = oembedData.title || 'Vídeo do YouTube';
-        } else {
-          title = 'Vídeo do YouTube';
         }
       } catch (err) {
-        title = 'Vídeo do YouTube';
+        title = 'Vídeo do YouTube'; // Fallback seguro
       }
       
-      // O Cobalt converte e faz fallback automático, então podemos fixar as resoluções
+      // Qualidades que o Oceansaver suporta com áudio embutido
       qualities = ['1080p', '720p', '480p', '360p', '144p', 'Apenas áudio (MP3)'];
 
     /* ── TikTok ── */
