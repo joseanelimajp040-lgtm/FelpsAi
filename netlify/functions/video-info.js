@@ -1,4 +1,4 @@
-/* ── video-info.js (v6 — ytdl-core + labels precisos) ── */
+/* ── video-info.js (v7 — Y2Mate + Invidious, sem ytdl-core) ── */
 exports.handler = async (event) => {
   const headers = {
     'Content-Type': 'application/json',
@@ -12,7 +12,6 @@ exports.handler = async (event) => {
 
     let title = 'Vídeo', platform = 'Web', qualities = [];
 
-    /* ── YouTube ── */
     if (/youtube\.com|youtu\.be/.test(url)) {
       platform = 'YouTube';
       try {
@@ -25,13 +24,7 @@ exports.handler = async (event) => {
         }
       } catch { title = 'Vídeo do YouTube'; }
 
-      // 360p e abaixo = muxed nativo (áudio+vídeo juntos, instantâneo)
-      // 480p/720p/1080p = tenta Y2Mate (pré-merge); fallback para 360p se falhar
-      qualities = [
-        '1080p', '720p', '480p',
-        '360p ✓', '240p ✓', '144p ✓',
-        'Apenas áudio (MP3)'
-      ];
+      qualities = ['1080p', '720p', '480p', '360p', '240p', '144p', 'Apenas áudio (MP3)'];
 
     } else if (/tiktok\.com/.test(url)) {
       platform = 'TikTok'; title = 'Vídeo do TikTok';
