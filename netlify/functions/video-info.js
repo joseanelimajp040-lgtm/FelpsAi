@@ -1,6 +1,4 @@
-/* ── video-info.js (v7 — endpoint correto: /video/details) ─────────────────
-   API: YouTube Video and Shorts Downloader (Farhan Ali)
-   ──────────────────────────────────────────────────────────────────────── */
+/* ── video-info.js (v8 — endpoint correto: /download.php?id=) ─────────────*/
 
 exports.handler = async (event) => {
   const headers = {
@@ -24,45 +22,36 @@ exports.handler = async (event) => {
       platform = 'YouTube';
       if (!rapidKey) throw new Error('RAPIDAPI_KEY não configurada no Netlify.');
 
-      /* ── Pega detalhes do vídeo ── */
-      const detailsRes = await fetch(
-        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/video/details?url=${encodeURIComponent(url)}`,
-        {
-          headers: {
-            'X-RapidAPI-Key':  rapidKey,
-            'X-RapidAPI-Host': 'youtube-video-and-shorts-downloader.p.rapidapi.com',
-          },
-          signal: AbortSignal.timeout(15000),
-        }
-      );
-      const details = await detailsRes.json();
-      if (!detailsRes.ok) throw new Error(details?.message || `Erro ${detailsRes.status}`);
-      title = details.title || details.videoTitle || 'Vídeo do YouTube';
+      const videoId = url.match(/(?:v=|youtu\.be\/)([^&?/\s]+)/)?.[1];
+      if (!videoId) throw new Error('ID do vídeo não encontrado na URL.');
 
-      /* ── Pega os streams disponíveis ── */
-      const streamsRes = await fetch(
-        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/video/download/streams?url=${encodeURIComponent(url)}`,
+      const res = await fetch(
+        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/download.php?id=${videoId}`,
         {
           headers: {
+            'Content-Type':    'application/json',
             'X-RapidAPI-Key':  rapidKey,
             'X-RapidAPI-Host': 'youtube-video-and-shorts-downloader.p.rapidapi.com',
           },
           signal: AbortSignal.timeout(20000),
         }
       );
-      const streamsData = await streamsRes.json();
 
-      /* Extrai qualidades únicas dos formatos retornados */
-      const allFormats = [
-        ...(streamsData.formats || []),
-        ...(streamsData.videoFormats || []),
-        ...(streamsData.adaptiveFormats || []),
-        ...(streamsData.streams || []),
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || `Erro ${res.status}`);
+
+      title = data.title || data.videoTitle || 'Vídeo do YouTube';
+
+      /* Extrai qualidades dos formatos retornados */
+      const formats = [
+        ...(data.formats         || []),
+        ...(data.videoFormats    || []),
+        ...(data.adaptiveFormats || []),
+        ...(data.streams         || []),
+        ...(data.links           || []),
       ];
 
-      const qs = allFormats
-        .filter(f => f.qualityLabel || f.quality || f.resolution)
-        .filter(f => f.hasVideo !== false) // inclui todos exceto os marcados sem vídeo
+      const qs = formats
         .map(f => f.qualityLabel || f.quality || f.resolution)
         .filter((v, i, a) => v && a.indexOf(v) === i)
         .sort((a, b) => parseInt(b) - parseInt(a));
