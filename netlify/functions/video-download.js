@@ -1,7 +1,5 @@
-/* ── video-download.js (v9 — YT Video Downloader Fast, muxed v+a) ───────────
-   YouTube: usa "YouTube Video Downloader Fast" que entrega MP4 já mesclado
-   TikTok / outros: RapidAPI Social Downloader
-   Requer RAPIDAPI_KEY nas env vars do Netlify
+/* ── video-download.js (v10 — YouTube Video and Shorts Downloader / Farhan Ali)
+   Base URL: https://youtube-video-and-shorts-downloader.p.rapidapi.com
    ──────────────────────────────────────────────────────────────────────── */
 
 exports.handler = async (event) => {
@@ -17,54 +15,85 @@ exports.handler = async (event) => {
     if (!url) throw new Error('URL não informada.');
 
     const rapidKey = process.env.RAPIDAPI_KEY;
-    if (!rapidKey) throw new Error('RAPIDAPI_KEY não configurada nas variáveis de ambiente do Netlify.');
+    if (!rapidKey) throw new Error('RAPIDAPI_KEY não configurada no Netlify.');
 
     const isAudio = /mp3|áudio|audio/i.test(quality || '');
 
     /* ══════════════════════════════════════════════════════
-       YOUTUBE — YouTube Video Downloader Fast
-       Retorna MP4 com vídeo+áudio já mesclados (360p/720p/1080p)
+       YOUTUBE
        ══════════════════════════════════════════════════════ */
     if (/youtube\.com|youtu\.be/.test(url)) {
 
       const res = await fetch(
-        'https://youtube-video-downloader-fast.p.rapidapi.com/download.php',
+        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/video?url=${encodeURIComponent(url)}`,
         {
-          method: 'POST',
           headers: {
-            'Content-Type':  'application/x-www-form-urlencoded',
             'X-RapidAPI-Key':  rapidKey,
-            'X-RapidAPI-Host': 'youtube-video-downloader-fast.p.rapidapi.com',
+            'X-RapidAPI-Host': 'youtube-video-and-shorts-downloader.p.rapidapi.com',
           },
-          body: new URLSearchParams({ url }).toString(),
           signal: AbortSignal.timeout(25000),
         }
       );
 
       const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || `Erro ${res.status}`);
+      if (!res.ok) throw new Error(data?.message || `Erro ${res.status}`);
 
-      /* A resposta tem campos tipo: mp4_360p, mp4_720p, mp4_1080p, mp3 */
+      /* Log para debug — aparece nos logs do Netlify */
+      console.log('[yt-dl] resposta keys:', Object.keys(data));
+
+      const formats = data.formats || data.videos || data.downloadLinks || data.links || [];
+
+      /* ── ÁUDIO ── */
       if (isAudio) {
-        const mp3 = data.mp3 || data.audio || data.mp3_128;
-        if (mp3) return { statusCode: 200, headers, body: JSON.stringify({ url: mp3 }) };
+        const audioUrl =
+          data.audioUrl || data.audio || data.mp3 ||
+          formats.find(f => /mp3|audio/i.test(f.ext || f.type || f.format || ''))?.url;
+
+        if (audioUrl) return { statusCode: 200, headers, body: JSON.stringify({ url: audioUrl }) };
         throw new Error('Formato de áudio não encontrado.');
       }
 
-      /* Mapeia qualidade → chave da resposta */
+      /* ── VÍDEO: tenta casar a qualidade ── */
       const qlNum = (quality || '720p').replace(/[^0-9]/g, '') || '720';
-      const preferenceOrder = [qlNum, '720', '1080', '480', '360'];
 
-      for (const q of preferenceOrder) {
-        const candidate = data[`mp4_${q}p`] || data[`${q}p`] || data[`video_${q}p`];
-        if (candidate) return { statusCode: 200, headers, body: JSON.stringify({ url: candidate }) };
+      if (formats.length > 0) {
+        const sorted = formats
+          .filter(f => f.url)
+          .sort((a, b) => {
+            const qa = parseInt(String(a.quality || a.qualityLabel || a.resolution || 0));
+            const qb = parseInt(String(b.quality || b.qualityLabel || b.resolution || 0));
+            return qb - qa;
+          });
+
+        const exact   = sorted.find(f => String(f.quality || f.qualityLabel || f.resolution || '').includes(qlNum));
+        const closest = sorted.find(f => parseInt(String(f.quality || f.qualityLabel || f.resolution || 0)) <= parseInt(qlNum));
+        const chosen  = exact || closest || sorted[0];
+
+        if (chosen?.url) return { statusCode: 200, headers, body: JSON.stringify({ url: chosen.url }) };
       }
 
-      /* Último fallback: qualquer URL que pareça mp4 na resposta */
-      const anyMp4 = Object.values(data).find(v => typeof v === 'string' && v.startsWith('http'));
-      if (anyMp4) return { statusCode: 200, headers, body: JSON.stringify({ url: anyMp4 }) };
+      /* Fallback: tenta endpoint /video/download direto com qualidade */
+      const dlRes = await fetch(
+        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/video/download?url=${encodeURIComponent(url)}&quality=${qlNum}p`,
+        {
+          headers: {
+            'X-RapidAPI-Key':  rapidKey,
+            'X-RapidAPI-Host': 'youtube-video-and-shorts-downloader.p.rapidapi.com',
+          },
+          signal: AbortSignal.timeout(25000),
+        }
+      );
+      const dlData = await dlRes.json();
+      console.log('[yt-dl] /video/download keys:', Object.keys(dlData));
 
-      throw new Error('Nenhum link de download encontrado na resposta. Tente outra qualidade.');
+      const dlUrl =
+        dlData.url || dlData.downloadUrl || dlData.download_url ||
+        dlData.link || dlData.videoUrl ||
+        Object.values(dlData).find(v => typeof v === 'string' && v.startsWith('http'));
+
+      if (dlUrl) return { statusCode: 200, headers, body: JSON.stringify({ url: dlUrl }) };
+
+      throw new Error('Não foi possível obter o link. Resposta: ' + JSON.stringify(dlData).slice(0, 200));
     }
 
     /* ══════════════════════════
