@@ -1,6 +1,5 @@
-/* ── video-download.js (v7 — Instâncias Comunitárias do Cobalt) ─────────
+/* ── video-download.js (v8 — Oceansaver / YT1s Backend) ──────────────────
    Recebe { url, quality } → retorna { url } de download direto
-   Faz requisição via POST API v10 para servidores com uptime alto.
 ──────────────────────────────────────────────────────────────────────── */
 exports.handler = async (event) => {
   const headers = {
@@ -18,65 +17,64 @@ exports.handler = async (event) => {
     const isAudio = /mp3|áudio|audio/i.test(quality || '');
 
     /* ══════════════════════════
-       YOUTUBE (Via Cobalt Community API v10)
+       YOUTUBE (Via Oceansaver API Pública - Sem Bloqueios)
        ══════════════════════════ */
     if (/youtube\.com|youtu\.be/.test(url)) {
       
-      // Lista de servidores públicos gratuitos do Cobalt (Sistema de Fallback)
-      const cobaltInstances = [
-        'https://cobalt.api.timelessnesses.me',
-        'https://api.cobalt.my.id',
-        'https://co.tskau.team',
-        'https://cobalt.synzr.space'
-      ];
+      // Define o formato esperado pela API
+      let formatCode = '720'; 
+      if (isAudio) {
+        formatCode = 'mp3';
+      } else {
+        const match = quality?.match(/\d+/);
+        if (match) formatCode = match[0]; // Captura 1080, 720, etc
+      }
 
-      const ql = quality ? quality.replace('p', '') : '1080';
+      const apiKey = 'dfcb6d76f2f6a9894gjkege8a4ab232222'; // Chave pública universal do Oceansaver
+      const initUrl = `https://p.oceansaver.in/ajax/download.php?format=${formatCode}&url=${encodeURIComponent(url)}&api=${apiKey}`;
       
-      const payload = isAudio ? {
-        url: url,
-        isAudioOnly: true,
-        audioFormat: "mp3"
-      } : {
-        url: url,
-        videoQuality: ql
-      };
+      // Passo 1: Solicita o download/conversão
+      const initRes = await fetch(initUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+        signal: AbortSignal.timeout(8000)
+      });
+      const initData = await initRes.json();
+      
+      if (!initData || !initData.success || !initData.id) {
+        throw new Error('Falha ao processar o vídeo no servidor matriz.');
+      }
 
-      let dlUrl = null;
-      let lastErrorMsg = 'Todos os servidores falharam.';
+      const jobId = initData.id;
+      let downloadUrl = null;
+      let attempts = 0;
 
-      // Tenta baixar em cada servidor da lista até um dar certo
-      for (const api of cobaltInstances) {
-        try {
-          const res = await fetch(api, {
-            method: 'POST',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(15000)
-          });
+      // Passo 2: Polling - Aguarda o áudio e o vídeo serem juntados
+      // Fazemos no máximo 4 tentativas (~8 segundos) para evitar o erro de Timeout do Netlify
+      while (attempts < 4) {
+        await new Promise(r => setTimeout(r, 2000));
+        attempts++;
 
-          const data = await res.json();
+        const progRes = await fetch(`https://p.oceansaver.in/ajax/progress.php?id=${jobId}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        const progData = await progRes.json();
 
-          // A API v10 do Cobalt retorna um desses status quando dá certo
-          if (data.status === 'redirect' || data.status === 'stream' || data.status === 'tunnel') {
-            dlUrl = data.url;
-            break; // Deu certo, encerra o loop de tentativas
-          } else if (data.status === 'error') {
-             lastErrorMsg = data.text || 'Erro retornado pela API do Cobalt.';
+        if (progData && progData.success) {
+          if (progData.progress === 1000 && progData.download_url) {
+            downloadUrl = progData.download_url;
+            break; // Vídeo pronto!
           }
-        } catch (err) {
-          lastErrorMsg = err.message;
-          continue; // Falhou por timeout ou rede, tenta o próximo servidor da array
+        } else {
+          throw new Error('Erro na nuvem durante a junção de áudio e vídeo.');
         }
       }
 
-      if (!dlUrl) {
-        throw new Error(`Servidores de vídeo indisponíveis no momento. Detalhe: ${lastErrorMsg}`);
+      if (!downloadUrl) {
+        // Se demorar mais de 8 segundos, o arquivo ainda está renderizando no fundo.
+        throw new Error('O vídeo é pesado e está sendo convertido no fundo. Aguarde 15 segundos e clique na qualidade novamente!');
       }
 
-      return { statusCode: 200, headers, body: JSON.stringify({ url: dlUrl }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ url: downloadUrl }) };
     }
 
     /* ══════════════════════════
@@ -135,7 +133,7 @@ exports.handler = async (event) => {
 
   } catch (err) {
     return {
-      statusCode: 400, // <--- Mantém o 400 para o frontend do main.js capturar corretamente
+      statusCode: 400,
       headers,
       body: JSON.stringify({ error: err.message }),
     };
