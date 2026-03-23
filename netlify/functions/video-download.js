@@ -61,32 +61,38 @@ exports.handler = async (event) => {
     }
 
     /* ══════════════════════════
-       TIKTOK
-       ══════════════════════════ */
-    if (/tiktok\.com/.test(url)) {
-      const res = await fetch(
-        `https://tiktok-video-no-watermark2.p.rapidapi.com/?url=${encodeURIComponent(url)}&hd=1`,
-        {
-          headers: {
-            'X-RapidAPI-Key':  rapidKey,
-            'X-RapidAPI-Host': 'tiktok-video-no-watermark2.p.rapidapi.com',
-          },
-          signal: AbortSignal.timeout(20000),
-        }
-      );
-      const data = await res.json();
-      const noWm = /marca|watermark/i.test(quality || '');
+   TIKTOK — tikwm.com (gratuito, sem chave de API)
+   ══════════════════════════ */
+if (/tiktok\.com/.test(url)) {
+  const res = await fetch('https://www.tikwm.com/api/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `url=${encodeURIComponent(url)}&hd=1`,
+    signal: AbortSignal.timeout(20000),
+  });
+  const data = await res.json();
 
-      const dlUrl = noWm
-        ? (data.data?.play || data.data?.hdplay)
-        : (data.data?.wmplay || data.data?.play);
+  if (data.code !== 0 || !data.data)
+    throw new Error(data.msg || 'Erro ao processar vídeo do TikTok.');
 
-      const audioUrl = data.data?.music;
+  const noWm  = /sem\s*marca|no.?watermark/i.test(quality || '');
+  const comWm = /com\s*marca|with.?watermark/i.test(quality || '');
 
-      if (isAudio && audioUrl) return { statusCode: 200, headers, body: JSON.stringify({ url: audioUrl }) };
-      if (!dlUrl) throw new Error('Não foi possível obter o link do TikTok.');
-      return { statusCode: 200, headers, body: JSON.stringify({ url: dlUrl }) };
-    }
+  if (isAudio) {
+    const audioUrl = data.data.music;
+    if (!audioUrl) throw new Error('Áudio não disponível para este vídeo.');
+    return { statusCode: 200, headers, body: JSON.stringify({ url: audioUrl }) };
+  }
+
+  // "Sem marca d'água" usa play (HD se disponível via hd=1) ou hdplay
+  // "Com marca d'água" usa wmplay
+  const dlUrl = comWm
+    ? (data.data.wmplay || data.data.play)
+    : (data.data.play   || data.data.hdplay);
+
+  if (!dlUrl) throw new Error('Não foi possível obter o link do TikTok.');
+  return { statusCode: 200, headers, body: JSON.stringify({ url: dlUrl }) };
+}
 
     /* ══════════════════════════
        INSTAGRAM / TWITTER / FACEBOOK
