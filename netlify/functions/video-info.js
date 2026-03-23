@@ -1,5 +1,5 @@
-/* ── video-info.js (v6 — YouTube Video and Shorts Downloader by Farhan Ali) ─
-   Base URL: https://youtube-video-and-shorts-downloader.p.rapidapi.com
+/* ── video-info.js (v7 — endpoint correto: /video/details) ─────────────────
+   API: YouTube Video and Shorts Downloader (Farhan Ali)
    ──────────────────────────────────────────────────────────────────────── */
 
 exports.handler = async (event) => {
@@ -20,13 +20,28 @@ exports.handler = async (event) => {
     let platform = 'Web';
     let qualities = [];
 
-    /* ── YouTube ── */
     if (/youtube\.com|youtu\.be/.test(url)) {
       platform = 'YouTube';
       if (!rapidKey) throw new Error('RAPIDAPI_KEY não configurada no Netlify.');
 
-      const res = await fetch(
-        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/video?url=${encodeURIComponent(url)}`,
+      /* ── Pega detalhes do vídeo ── */
+      const detailsRes = await fetch(
+        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/video/details?url=${encodeURIComponent(url)}`,
+        {
+          headers: {
+            'X-RapidAPI-Key':  rapidKey,
+            'X-RapidAPI-Host': 'youtube-video-and-shorts-downloader.p.rapidapi.com',
+          },
+          signal: AbortSignal.timeout(15000),
+        }
+      );
+      const details = await detailsRes.json();
+      if (!detailsRes.ok) throw new Error(details?.message || `Erro ${detailsRes.status}`);
+      title = details.title || details.videoTitle || 'Vídeo do YouTube';
+
+      /* ── Pega os streams disponíveis ── */
+      const streamsRes = await fetch(
+        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/video/download/streams?url=${encodeURIComponent(url)}`,
         {
           headers: {
             'X-RapidAPI-Key':  rapidKey,
@@ -35,17 +50,20 @@ exports.handler = async (event) => {
           signal: AbortSignal.timeout(20000),
         }
       );
+      const streamsData = await streamsRes.json();
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.message || `Erro ${res.status}`);
+      /* Extrai qualidades únicas dos formatos retornados */
+      const allFormats = [
+        ...(streamsData.formats || []),
+        ...(streamsData.videoFormats || []),
+        ...(streamsData.adaptiveFormats || []),
+        ...(streamsData.streams || []),
+      ];
 
-      title = data.title || data.videoTitle || 'Vídeo do YouTube';
-
-      /* Pega qualidades dos formatos retornados */
-      const formats = data.formats || data.videos || data.downloadLinks || [];
-      const qs = formats
-        .filter(f => f.quality || f.qualityLabel || f.resolution)
-        .map(f => f.quality || f.qualityLabel || f.resolution)
+      const qs = allFormats
+        .filter(f => f.qualityLabel || f.quality || f.resolution)
+        .filter(f => f.hasVideo !== false) // inclui todos exceto os marcados sem vídeo
+        .map(f => f.qualityLabel || f.quality || f.resolution)
         .filter((v, i, a) => v && a.indexOf(v) === i)
         .sort((a, b) => parseInt(b) - parseInt(a));
 
@@ -74,7 +92,7 @@ exports.handler = async (event) => {
       qualities = ['Melhor qualidade'];
 
     } else {
-      throw new Error('Plataforma não suportada. Use YouTube, TikTok, Instagram, Twitter ou Facebook.');
+      throw new Error('Plataforma não suportada.');
     }
 
     return {
