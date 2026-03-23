@@ -2085,12 +2085,6 @@ imggenGenerate.addEventListener('click', async () => {
 <script>
 (function () {
 
-/* ── Acorda o servidor Render ao carregar a página ── */
-(function wakeServer() {
-  const SERVER = 'https://SEU-SERVIDOR.onrender.com'; // ← sua URL do Render
-  fetch(SERVER + '/health', { mode: 'no-cors' }).catch(() => {});
-})();
-
   /* ── 1. DETECÇÃO DE COMANDO ───────────────────────────────────────────── */
   function detectVideoDownload(text) {
     /* Aceita: "baixe URL", "baixar URL", "baixa URL" */
