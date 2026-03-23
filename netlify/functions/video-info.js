@@ -1,6 +1,6 @@
-/* ── video-info.js ────────────────────────────────────────────────────────
+/* ── video-info.js (v5 — oEmbed + Cobalt Settings) ────────────────────────
    Recebe { url } → retorna { title, platform, qualities }
-   Usa Y2Mate para YouTube (gratuito, com áudio embutido até 1080p).
+   Usa oEmbed oficial do YouTube para não sofrer bloqueio de IP.
 ──────────────────────────────────────────────────────────────────────── */
 exports.handler = async (event) => {
   const headers = {
@@ -19,44 +19,24 @@ exports.handler = async (event) => {
     let platform = 'Web';
     let qualities = [];
 
-    /* ── YouTube (Via Y2Mate - Gratuito, Sem Cobalt, Áudio e Vídeo Juntos) ── */
+    /* ── YouTube (Usando API oEmbed oficial para o título) ── */
     if (/youtube\.com|youtu\.be/.test(url)) {
       platform = 'YouTube';
-
-      const formData = new URLSearchParams();
-      formData.append('k_query', url);
-      formData.append('k_page', 'home');
-      formData.append('hl', 'pt');
-      formData.append('q_auto', '1');
-
-      const res = await fetch('https://www.y2mate.com/mates/analyzeV2/ajax', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-        },
-        body: formData.toString(),
-        signal: AbortSignal.timeout(15000)
-      });
-
-      const data = await res.json();
-      if (data.status !== 'ok') throw new Error('Erro ao buscar vídeo no servidor.');
-
-      title = data.title || 'Vídeo do YouTube';
-
-      // Extrai as qualidades disponíveis em MP4 (1080p, 720p, etc)
-      const mp4Links = data.links?.mp4 || {};
-      const qs = Object.values(mp4Links)
-        .map(f => f.q)
-        .filter(q => q && q !== 'auto')
-        .sort((a, b) => parseInt(b) - parseInt(a)); // Ordena da maior para menor
-
-      // Remove qualidades duplicadas
-      const uniqueQs = [...new Set(qs)];
-
-      qualities = uniqueQs.length > 0 
-        ? [...uniqueQs, 'Apenas áudio (MP3)'] 
-        : ['1080p', '720p', '480p', '360p', '144p', 'Apenas áudio (MP3)'];
+      
+      try {
+        const oembedRes = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+        if (oembedRes.ok) {
+          const oembedData = await oembedRes.json();
+          title = oembedData.title || 'Vídeo do YouTube';
+        } else {
+          title = 'Vídeo do YouTube';
+        }
+      } catch (err) {
+        title = 'Vídeo do YouTube';
+      }
+      
+      // O Cobalt converte e faz fallback automático, então podemos fixar as resoluções
+      qualities = ['1080p', '720p', '480p', '360p', '144p', 'Apenas áudio (MP3)'];
 
     /* ── TikTok ── */
     } else if (/tiktok\.com/.test(url)) {
