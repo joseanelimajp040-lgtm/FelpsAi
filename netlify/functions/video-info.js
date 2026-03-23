@@ -1,21 +1,14 @@
-/* ── video-info.js (v4 — RapidAPI yt-api, sem dependências npm) ─────────────
-   Recebe { url } → retorna { title, platform, qualities }
-   Usa apenas fetch nativo do Node 18+ (zero dependências)
-   ──────────────────────────────────────────────────────────────────────── */
-
+/* ── video-info.js (v5 — oEmbed título + qualidades fixas loader.to) ──── */
 exports.handler = async (event) => {
   const headers = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
   };
-
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers };
 
   try {
     const { url } = JSON.parse(event.body || '{}');
     if (!url) throw new Error('URL não informada.');
-
-    const rapidKey = process.env.RAPIDAPI_KEY;
 
     let title    = 'Vídeo';
     let platform = 'Web';
@@ -25,42 +18,30 @@ exports.handler = async (event) => {
     if (/youtube\.com|youtu\.be/.test(url)) {
       platform = 'YouTube';
 
-      if (!rapidKey) throw new Error('RAPIDAPI_KEY não configurada nas variáveis de ambiente do Netlify.');
-
-      const videoId = url.match(/(?:v=|youtu\.be\/)([^&?/]+)/)?.[1];
-      if (!videoId) throw new Error('ID do vídeo não encontrado na URL.');
-
-      const res = await fetch(
-        `https://yt-api.p.rapidapi.com/dl?id=${videoId}`,
-        {
-          headers: {
-            'X-RapidAPI-Key':  rapidKey,
-            'X-RapidAPI-Host': 'yt-api.p.rapidapi.com',
-          },
-          signal: AbortSignal.timeout(15000),
+      // oEmbed: gratuito, sem chave, só busca o título
+      try {
+        const oe = await fetch(
+          `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+          { signal: AbortSignal.timeout(8000) }
+        );
+        if (oe.ok) {
+          const oeData = await oe.json();
+          title = oeData.title || 'Vídeo do YouTube';
+        } else {
+          title = 'Vídeo do YouTube';
         }
-      );
-      const data = await res.json();
-      if (!res.ok || data.status === 'FAILED') throw new Error(data.message || 'Erro ao buscar vídeo.');
+      } catch {
+        title = 'Vídeo do YouTube';
+      }
 
-      title = data.title || 'Vídeo do YouTube';
-
-      // Qualidades disponíveis
-      const qs = (data.formats || [])
-        .filter(f => f.qualityLabel && f.hasVideo && f.hasAudio)
-        .map(f => f.qualityLabel)
-        .filter((v, i, a) => a.indexOf(v) === i)
-        .sort((a, b) => parseInt(b) - parseInt(a));
-
-      qualities = qs.length > 0
-        ? [...qs, 'Apenas áudio (MP3)']
-        : ['1080p', '720p', '480p', '360p', 'Apenas áudio (MP3)'];
+      // loader.to faz o merge de todas essas qualidades no servidor
+      qualities = ['144p', '240p', '360p', '480p', '720p', '1080p', 'Apenas áudio (MP3)'];
 
     /* ── TikTok ── */
     } else if (/tiktok\.com/.test(url)) {
       platform = 'TikTok';
       title    = 'Vídeo do TikTok';
-      qualities = ['Sem marca d\'água', 'Com marca d\'água', 'Apenas áudio (MP3)'];
+      qualities = ["Sem marca d'água", "Com marca d'água", 'Apenas áudio (MP3)'];
 
     /* ── Instagram ── */
     } else if (/instagram\.com/.test(url)) {
