@@ -1,7 +1,5 @@
-/* ── video-info.js (v2 — com timeout e fallback de título) ─────────────────
-   Recebe { url } → retorna { title, platform, qualities }
-   Não depende de chave de API.
-   ──────────────────────────────────────────────────────────────────────── */
+/* ── video-info.js (v3 — ytdl-core para YouTube, oEmbed para o resto) ── */
+const ytdl = require('@distube/ytdl-core');
 
 exports.handler = async (event) => {
   const headers = {
@@ -9,74 +7,54 @@ exports.handler = async (event) => {
     'Access-Control-Allow-Origin': '*',
   };
 
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers };
-  }
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers };
 
   try {
     const { url } = JSON.parse(event.body || '{}');
     if (!url) throw new Error('URL não informada.');
 
     let title    = 'Vídeo';
-    let platform = 'Desconhecida';
+    let platform = 'Web';
+    let qualities = ['Melhor qualidade', 'Apenas áudio (MP3)'];
 
-    /* ── Detecta plataforma ── */
-    if (/youtube\.com|youtu\.be/.test(url)) {
+    /* ── YouTube: usa ytdl-core para pegar info real ── */
+    if (ytdl.validateURL(url)) {
       platform = 'YouTube';
-      try {
-        const r = await fetch(
-          `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
-          { signal: AbortSignal.timeout(8000) }
-        );
-        if (r.ok) {
-          const d = await r.json();
-          title = d.title || 'Vídeo do YouTube';
-        } else {
-          title = 'Vídeo do YouTube';
-        }
-      } catch (_) {
-        title = 'Vídeo do YouTube';
-      }
+      const info = await ytdl.getBasicInfo(url);
+      title = info.videoDetails.title || 'Vídeo do YouTube';
+
+      // Pega as qualidades disponíveis no vídeo
+      const formats = ytdl.filterFormats(info.formats, 'videoandaudio');
+      const qs = [...new Set(
+        formats
+          .map(f => f.qualityLabel)
+          .filter(Boolean)
+      )].sort((a, b) => parseInt(b) - parseInt(a));
+
+      qualities = qs.length > 0
+        ? [...qs, 'Apenas áudio (MP3)']
+        : ['720p', '480p', '360p', 'Apenas áudio (MP3)'];
 
     } else if (/tiktok\.com/.test(url)) {
       platform = 'TikTok';
-      try {
-        const r = await fetch(
-          `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
-          { signal: AbortSignal.timeout(8000) }
-        );
-        if (r.ok) {
-          const d = await r.json();
-          title = d.title || 'Vídeo do TikTok';
-        } else {
-          title = 'Vídeo do TikTok';
-        }
-      } catch (_) {
-        title = 'Vídeo do TikTok';
-      }
+      title    = 'Vídeo do TikTok';
+      qualities = ['Melhor qualidade', 'Apenas áudio (MP3)'];
 
     } else if (/instagram\.com/.test(url)) {
       platform = 'Instagram';
-      title     = 'Vídeo do Instagram';
+      title    = 'Vídeo do Instagram';
+      qualities = ['Melhor qualidade'];
 
     } else if (/twitter\.com|x\.com/.test(url)) {
       platform = 'X / Twitter';
-      title     = 'Vídeo do X';
+      title    = 'Vídeo do X';
+      qualities = ['Melhor qualidade'];
 
     } else if (/facebook\.com|fb\.watch/.test(url)) {
       platform = 'Facebook';
-      title     = 'Vídeo do Facebook';
-
-    } else {
-      platform = 'Web';
-      title     = 'Vídeo';
+      title    = 'Vídeo do Facebook';
+      qualities = ['Melhor qualidade'];
     }
-
-    /* ── Qualidades por plataforma ── */
-    const qualities =
-      platform === 'YouTube'
-        ? ['1080p', '720p', '480p', '360p', 'Apenas áudio (MP3)']
-        : ['Melhor qualidade', '720p', '480p', 'Apenas áudio (MP3)'];
 
     return {
       statusCode: 200,
