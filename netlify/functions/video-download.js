@@ -1,6 +1,4 @@
-/* ── video-download.js (v11 — endpoint correto: /video/download/streams) ────
-   API: YouTube Video and Shorts Downloader (Farhan Ali)
-   ──────────────────────────────────────────────────────────────────────── */
+/* ── video-download.js (v12 — endpoint correto: /download.php?id=) ──────── */
 
 exports.handler = async (event) => {
   const headers = {
@@ -23,11 +21,14 @@ exports.handler = async (event) => {
        YOUTUBE
        ══════════════════════════════════ */
     if (/youtube\.com|youtu\.be/.test(url)) {
+      const videoId = url.match(/(?:v=|youtu\.be\/)([^&?/\s]+)/)?.[1];
+      if (!videoId) throw new Error('ID do vídeo não encontrado na URL.');
 
       const res = await fetch(
-        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/video/download/streams?url=${encodeURIComponent(url)}`,
+        `https://youtube-video-and-shorts-downloader.p.rapidapi.com/download.php?id=${videoId}`,
         {
           headers: {
+            'Content-Type':    'application/json',
             'X-RapidAPI-Key':  rapidKey,
             'X-RapidAPI-Host': 'youtube-video-and-shorts-downloader.p.rapidapi.com',
           },
@@ -38,24 +39,26 @@ exports.handler = async (event) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || `Erro ${res.status}`);
 
-      /* Junta todos os formatos disponíveis */
-      const all = [
-        ...(data.formats          || []),
-        ...(data.videoFormats     || []),
-        ...(data.adaptiveFormats  || []),
-        ...(data.streams          || []),
-      ];
+      /* Loga a estrutura completa para debug nos logs do Netlify */
+      console.log('[yt-dl] keys:', Object.keys(data));
+      console.log('[yt-dl] amostra:', JSON.stringify(data).slice(0, 500));
 
-      console.log('[yt-dl] total formatos:', all.length);
-      console.log('[yt-dl] exemplo formato:', JSON.stringify(all[0] || {}));
+      /* Junta todos os arrays de formatos possíveis */
+      const all = [
+        ...(data.formats         || []),
+        ...(data.videoFormats    || []),
+        ...(data.adaptiveFormats || []),
+        ...(data.streams         || []),
+        ...(data.links           || []),
+      ];
 
       /* ── ÁUDIO ── */
       if (isAudio) {
-        const audio = all
-          .filter(f => f.url && (!f.hasVideo || f.hasVideo === false) && f.hasAudio !== false)
-          .sort((a, b) => (b.bitrate || b.audioBitrate || 0) - (a.bitrate || a.audioBitrate || 0))[0]
-          // fallback: qualquer formato de áudio
-          || all.find(f => f.url && /mp3|audio/i.test(f.mimeType || f.ext || f.type || ''));
+        const audio =
+          all.find(f => f.url && /mp3|audio/i.test(f.mimeType || f.ext || f.type || '')) ||
+          all.filter(f => f.url && !f.hasVideo).sort((a,b) => (b.bitrate||0)-(a.bitrate||0))[0] ||
+          (data.audio ? { url: data.audio } : null) ||
+          (data.mp3   ? { url: data.mp3   } : null);
 
         if (audio?.url) return { statusCode: 200, headers, body: JSON.stringify({ url: audio.url }) };
         throw new Error('Formato de áudio não encontrado.');
@@ -64,28 +67,30 @@ exports.handler = async (event) => {
       /* ── VÍDEO ── */
       const qlNum = (quality || '720p').replace(/[^0-9]/g, '') || '720';
 
-      const withUrl = all.filter(f => f.url);
+      if (all.length > 0) {
+        const withUrl = all.filter(f => f.url);
+        const sorted  = withUrl.sort((a, b) => {
+          const qa = parseInt(String(a.qualityLabel || a.quality || a.resolution || 0));
+          const qb = parseInt(String(b.qualityLabel || b.quality || b.resolution || 0));
+          return qb - qa;
+        });
 
-      // Preferência: formatos que têm vídeo+áudio (muxed)
-      const muxed = withUrl.filter(f => f.hasVideo !== false && f.hasAudio !== false);
-      // Fallback: qualquer formato com vídeo
-      const anyVideo = withUrl.filter(f => f.hasVideo !== false);
+        const exact   = sorted.find(f => String(f.qualityLabel || f.quality || f.resolution || '').includes(qlNum));
+        const closest = sorted.find(f => parseInt(String(f.qualityLabel || f.quality || f.resolution || 0)) <= parseInt(qlNum));
+        const chosen  = exact || closest || sorted[0];
 
-      const pool = muxed.length > 0 ? muxed : anyVideo;
+        if (chosen?.url) return { statusCode: 200, headers, body: JSON.stringify({ url: chosen.url }) };
+      }
 
-      const sorted = pool.sort((a, b) => {
-        const qa = parseInt(String(a.qualityLabel || a.quality || a.resolution || 0));
-        const qb = parseInt(String(b.qualityLabel || b.quality || b.resolution || 0));
-        return qb - qa;
-      });
+      /* Fallback: campos diretos no objeto raiz */
+      const direct =
+        data[`mp4_${qlNum}p`] || data[`${qlNum}p`] ||
+        data.mp4_1080p || data.mp4_720p || data.mp4_480p || data.mp4_360p ||
+        data.videoUrl  || data.downloadUrl || data.download_url;
 
-      const exact   = sorted.find(f => String(f.qualityLabel || f.quality || f.resolution || '').includes(qlNum));
-      const closest = sorted.find(f => parseInt(String(f.qualityLabel || f.quality || f.resolution || 0)) <= parseInt(qlNum));
-      const chosen  = exact || closest || sorted[0];
+      if (direct) return { statusCode: 200, headers, body: JSON.stringify({ url: direct }) };
 
-      if (chosen?.url) return { statusCode: 200, headers, body: JSON.stringify({ url: chosen.url }) };
-
-      throw new Error('Nenhum formato de vídeo encontrado. Resposta: ' + JSON.stringify(data).slice(0, 300));
+      throw new Error('Link não encontrado. Estrutura recebida: ' + JSON.stringify(data).slice(0, 300));
     }
 
     /* ══════════════════════════
