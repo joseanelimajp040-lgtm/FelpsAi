@@ -1,6 +1,6 @@
-/* ── video-info.js ──────────────────────────────────────────────────────────
-   Recebe { url } e retorna { title, platform, qualities }
-   Sem dependências extras — usa fetch nativo do Node 18+
+/* ── video-info.js (v2 — com timeout e fallback de título) ─────────────────
+   Recebe { url } → retorna { title, platform, qualities }
+   Não depende de chave de API.
    ──────────────────────────────────────────────────────────────────────── */
 
 exports.handler = async (event) => {
@@ -20,24 +20,40 @@ exports.handler = async (event) => {
     let title    = 'Vídeo';
     let platform = 'Desconhecida';
 
-    /* ── Detecta plataforma e pega título via oEmbed (sem chave) ── */
+    /* ── Detecta plataforma ── */
     if (/youtube\.com|youtu\.be/.test(url)) {
       platform = 'YouTube';
       try {
         const r = await fetch(
-          `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+          `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+          { signal: AbortSignal.timeout(8000) }
         );
-        if (r.ok) ({ title } = await r.json());
-      } catch (_) {}
+        if (r.ok) {
+          const d = await r.json();
+          title = d.title || 'Vídeo do YouTube';
+        } else {
+          title = 'Vídeo do YouTube';
+        }
+      } catch (_) {
+        title = 'Vídeo do YouTube';
+      }
 
     } else if (/tiktok\.com/.test(url)) {
       platform = 'TikTok';
       try {
         const r = await fetch(
-          `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`
+          `https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`,
+          { signal: AbortSignal.timeout(8000) }
         );
-        if (r.ok) ({ title } = await r.json());
-      } catch (_) {}
+        if (r.ok) {
+          const d = await r.json();
+          title = d.title || 'Vídeo do TikTok';
+        } else {
+          title = 'Vídeo do TikTok';
+        }
+      } catch (_) {
+        title = 'Vídeo do TikTok';
+      }
 
     } else if (/instagram\.com/.test(url)) {
       platform = 'Instagram';
@@ -50,9 +66,13 @@ exports.handler = async (event) => {
     } else if (/facebook\.com|fb\.watch/.test(url)) {
       platform = 'Facebook';
       title     = 'Vídeo do Facebook';
+
+    } else {
+      platform = 'Web';
+      title     = 'Vídeo';
     }
 
-    /* ── Opções de qualidade por plataforma ── */
+    /* ── Qualidades por plataforma ── */
     const qualities =
       platform === 'YouTube'
         ? ['1080p', '720p', '480p', '360p', 'Apenas áudio (MP3)']
