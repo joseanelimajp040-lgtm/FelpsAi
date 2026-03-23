@@ -701,6 +701,125 @@
   letter-spacing: 0.1em; color: rgba(93,216,192,0.6);
   text-align: center; min-height: 18px;
 }
+/* ══════════════ MOBILE GLOBAL ══════════════ */
+
+/* dvh corrige o bug clássico do 100vh no iOS (barra do Safari come espaço) */
+#root { height: 100dvh; }
+
+/* Previne zoom ao focar input no iOS (exige font-size ≥ 16px) */
+#msg-input { font-size: 16px; line-height: 1.3; height: auto; min-height: 44px; }
+
+/* Evita double-tap zoom e delay de clique em todos os botões */
+button, a { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+/* Previne bounce scroll no iOS sem travar o painel de resposta */
+body, html { overscroll-behavior: none; }
+
+/* ══════════════ SAFE AREA (iPhone notch, Dynamic Island, home bar) ══════════════ */
+#topbar {
+  top: max(20px, env(safe-area-inset-top, 20px));
+  padding-left:  max(24px, calc(env(safe-area-inset-left,  0px) + 16px));
+  padding-right: max(24px, calc(env(safe-area-inset-right, 0px) + 16px));
+}
+
+#bottom-controls {
+  bottom: max(36px, calc(env(safe-area-inset-bottom, 0px) + 20px));
+}
+
+#menu-btn {
+  bottom: max(38px, calc(env(safe-area-inset-bottom, 0px) + 18px));
+  left:   max(32px, calc(env(safe-area-inset-left,   0px) + 16px));
+}
+
+#gemini-badge {
+  bottom: max(44px, calc(env(safe-area-inset-bottom, 0px) + 24px));
+  right:  max(32px, calc(env(safe-area-inset-right,  0px) + 16px));
+}
+
+/* ══════════════ AJUSTES ESPECÍFICOS MOBILE ══════════════ */
+@media (max-width: 768px) {
+  /* Topbar mais compacto */
+  #topbar { height: 56px; padding: 0 16px; }
+
+  /* Input bar ocupa mais largura e fica mais alta (área de toque) */
+  #bottom-controls { width: calc(100% - 32px); }
+  .input-wrapper { padding: 6px 6px 6px 18px; }
+  #msg-input { font-size: 16px; }
+
+  /* Botões menores na barra ficam com tap area garantida */
+  #mic-btn, #img-btn { width: 42px; height: 42px; }
+  #send-btn          { width: 42px; height: 42px; }
+
+  /* Painel lateral vira bottom sheet — fica colado no fundo */
+  #neural-panel {
+    top: unset;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    height: 72vh;
+    padding: 0;
+    transform: translateY(100%);
+    border-radius: 24px 24px 0 0;
+    z-index: 150;
+  }
+  #neural-panel.open { transform: translateY(0); }
+
+  /* Quando o painel está aberto na esfera, deixa transparente mas visível */
+  #sphere-zone.panel-open {
+    right: 0;
+    opacity: 0.45;
+    pointer-events: none; /* toque vai pro painel, não pra esfera */
+  }
+
+  /* Glass panel no bottom sheet */
+  .glass-panel {
+    border-radius: 24px 24px 0 0;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+
+  /* Indicador visual de "puxar pra fechar" (drag handle) */
+  .panel-header::before {
+    content: '';
+    display: block;
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px; height: 4px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 2px;
+  }
+  .panel-header { position: relative; padding-top: 22px; }
+
+  /* Histórico sobe junto ao menu button */
+  #history-overlay { padding: 0 16px 108px 16px; align-items: flex-end; justify-content: flex-start; }
+  #history-panel { width: 100%; max-height: 65vh; }
+
+  /* Menu btn não sobrepõe input bar */
+  #menu-btn { bottom: max(100px, calc(env(safe-area-inset-bottom, 0px) + 96px)); left: max(20px, calc(env(safe-area-inset-left, 0px) + 16px)); }
+
+  /* Badge Gemini some no mobile (pouco espaço) */
+  #gemini-badge { display: none; }
+
+  /* Wake word indicator compacto */
+  #wake-indicator span#wake-label { display: none; }
+
+  /* State tag menor */
+  #state-tag { font-size: 9px; padding: 5px 10px; }
+
+  /* Brand name compacta */
+  .brand-name .brand-suffix { display: none; }
+
+  /* Modal de imagem ocupa tela toda */
+  #imggen-modal { border-radius: 20px 20px 0 0; position: fixed; bottom: 0; left: 0; right: 0; width: 100%; margin: 0; }
+  #imggen-overlay { align-items: flex-end; }
+}
+
+/* ══════════════ TECLADO VIRTUAL (Visual Viewport) ══════════════ */
+/* A classe .keyboard-open é adicionada via JS quando o teclado abre */
+.keyboard-open #sphere-zone { opacity: 0.25; transition: opacity 0.3s; }
+.keyboard-open #topbar { opacity: 0; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -710,7 +829,7 @@
   <div id="topbar">
     <div class="brand">
       <div class="brand-logo"></div>
-      <span class="brand-name">GÊNESIS <span style="opacity:0.45; font-weight:300">BY FELPSAI</span></span>
+      <span class="brand-name">GÊNESIS <span class="brand-suffix" style="opacity:0.45; font-weight:300">BY FELPSAI</span></span>
     </div>
     <div id="state-tag">em repouso</div>
   </div>
@@ -872,10 +991,24 @@ window.addEventListener('resize', resize);
   
 let STATE = 'idle', stateT = 0, time = 0, lastT = performance.now();
 let MX = 0, MY = 0, mouseInside = false;
+// Mouse
 document.addEventListener('mousemove', e => {
   const r = canvas.getBoundingClientRect();
   MX = e.clientX - r.left; MY = e.clientY - r.top; mouseInside = true;
 });
+
+// Touch — mantém a esfera responsiva ao toque
+document.addEventListener('touchmove', e => {
+  const t = e.touches[0];
+  const r = canvas.getBoundingClientRect();
+  MX = t.clientX - r.left; MY = t.clientY - r.top; mouseInside = true;
+}, { passive: true });
+document.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  const r = canvas.getBoundingClientRect();
+  MX = t.clientX - r.left; MY = t.clientY - r.top; mouseInside = true;
+}, { passive: true });
+document.addEventListener('touchend', () => { mouseInside = false; }, { passive: true });
 
 const N   = 800;
 const phi = Math.PI * (3 - Math.sqrt(5));
@@ -1077,6 +1210,47 @@ function closeNeuralPanel() {
 }
 
 closePanel.addEventListener('click', closeNeuralPanel);
+
+/* ── SWIPE DOWN PRA FECHAR o painel (mobile bottom sheet) ── */
+(function () {
+  const panel  = document.getElementById('neural-panel');
+  const glass  = panel.querySelector('.glass-panel');
+  let startY = 0, isDragging = false, startScrollTop = 0;
+
+  panel.addEventListener('touchstart', e => {
+    const area = document.getElementById('reply-area');
+    startY         = e.touches[0].clientY;
+    startScrollTop = area.scrollTop;
+    isDragging     = false;
+  }, { passive: true });
+
+  panel.addEventListener('touchmove', e => {
+    const dy = e.touches[0].clientY - startY;
+    const area = document.getElementById('reply-area');
+
+    // Só swipe se: arrastrando pra baixo E o scroll do painel está no topo
+    if (dy > 10 && area.scrollTop <= 0) {
+      isDragging = true;
+      const clamp = Math.max(0, dy);
+      panel.style.transform = `translateY(${clamp}px)`;
+      panel.style.transition = 'none';
+    }
+  }, { passive: true });
+
+  panel.addEventListener('touchend', e => {
+    const dy = e.changedTouches[0].clientY - startY;
+    panel.style.transition = '';
+
+    if (isDragging && dy > 90) {
+      // Fechou com swipe
+      closeNeuralPanel();
+    } else {
+      // Voltou pra posição original
+      panel.style.transform = '';
+    }
+    isDragging = false;
+  });
+})();
 
 function setState(s) {
   STATE = s; stateT = 0;
@@ -2375,6 +2549,61 @@ dlBtn.addEventListener('click', async function () {
 
   }, true /* capture = true → roda ANTES do listener original */);
 
+})();
+/* ── VISUAL VIEWPORT: ajusta input bar quando teclado abre no mobile ── */
+(function () {
+  if (!window.visualViewport) return;
+
+  const bottomCtrlEl = document.getElementById('bottom-controls');
+  const rootEl       = document.getElementById('root');
+
+  let baseBottom = null;
+
+  function onViewportChange() {
+    const vv     = window.visualViewport;
+    const docH   = window.innerHeight;
+    const visH   = vv.height;
+    const offset = vv.offsetTop;
+
+    // Teclado abriu se a viewport visível diminuiu ≥ 120px
+    const keyboardH = docH - visH - offset;
+    const kbOpen    = keyboardH > 120;
+
+    if (kbOpen) {
+      // Reposiciona o input acima do teclado
+      const safeBottom = Math.max(12, keyboardH - offset + 8);
+      bottomCtrlEl.style.bottom    = safeBottom + 'px';
+      bottomCtrlEl.style.transform = 'translateX(-50%)';
+      document.body.classList.add('keyboard-open');
+    } else {
+      // Restaura posição original (safe-area via CSS cuida do valor)
+      bottomCtrlEl.style.bottom    = '';
+      bottomCtrlEl.style.transform = '';
+      document.body.classList.remove('keyboard-open');
+    }
+    // Força redraw da esfera para o novo tamanho
+    resize();
+  }
+
+  window.visualViewport.addEventListener('resize', onViewportChange);
+  window.visualViewport.addEventListener('scroll', onViewportChange);
+})();
+
+/* ── TEXTAREA: auto-expande no mobile (até 3 linhas) ── */
+(function () {
+  const inp = document.getElementById('msg-input');
+  inp.addEventListener('input', function () {
+    this.style.height = 'auto';
+    this.style.height = Math.min(this.scrollHeight, 96) + 'px';
+  });
+
+  // Reset de altura ao enviar
+  const origClick = document.getElementById('send-btn').onclick;
+  document.getElementById('send-btn').addEventListener('click', function () {
+    setTimeout(() => {
+      inp.style.height = '';
+    }, 100);
+  });
 })();
 </script>
 </body>
