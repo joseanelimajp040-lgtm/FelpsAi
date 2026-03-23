@@ -1,0 +1,7 @@
+{
+  "name": "genesis-functions",
+  "version": "1.0.0",
+  "dependencies": {
+    "@distube/ytdl-core": "^4.14.4"
+  }
+}
