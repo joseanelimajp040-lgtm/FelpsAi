@@ -28,7 +28,7 @@ exports.handler = async (event) => {
     const vQuality = qualityMap[quality?.toLowerCase()] || '720';
 
     /* ── Chama cobalt.tools (API pública, sem chave) ── */
-    const cobaltRes = await fetch('https://api.cobalt.tools/', {
+    const cobaltRes = await fetch('https://cobalt.imput.net/', {
       method: 'POST',
       headers: {
         'Accept':       'application/json',
