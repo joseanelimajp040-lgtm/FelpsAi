@@ -386,6 +386,7 @@
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(5px); }
   to   { opacity: 1; transform: translateY(0); }
+  @keyframes spin { to { transform: rotate(360deg); } }
 }
 .rt-animate { animation: fadeUp 0.35s cubic-bezier(0.16,1,0.3,1) both; }
   
@@ -2257,27 +2258,61 @@ imggenGenerate.addEventListener('click', async () => {
       'white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
     sub.textContent = title;
 
-    /* Botão de download principal */
-    const dlBtn = document.createElement('a');
-    dlBtn.href     = dlUrl;
-    dlBtn.target   = '_blank';
-    dlBtn.rel      = 'noopener noreferrer';
-    dlBtn.download = '';
+    /* Botão de download principal — fetch + blob (sem abrir nova aba) */
+const dlBtn = document.createElement('button');
+dlBtn.innerHTML =
+  '<span class="material-symbols-outlined" ' +
+    'style="font-size:18px;vertical-align:middle">download</span>' +
+  ' Baixar · ' + quality;
+dlBtn.style.cssText = [
+  'display:flex', 'align-items:center', 'justify-content:center', 'gap:8px',
+  'padding:13px 20px', 'border-radius:12px',
+  'background:var(--accent)', 'color:#03050a',
+  'font-size:13px', 'font-weight:700',
+  "font-family:'Inter',sans-serif",
+  'border:none', 'cursor:pointer',
+  'transition:background .2s, opacity .2s', 'width:100%',
+].join(';');
+dlBtn.onmouseover = function () { if (!dlBtn.disabled) dlBtn.style.background = '#73ecd4'; };
+dlBtn.onmouseout  = function () { if (!dlBtn.disabled) dlBtn.style.background = 'var(--accent)'; };
+
+dlBtn.addEventListener('click', async function () {
+  /* Feedback visual */
+  dlBtn.disabled = true;
+  dlBtn.style.opacity = '0.6';
+  dlBtn.innerHTML =
+    '<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;animation:spin 1s linear infinite">progress_activity</span>' +
+    ' Baixando...';
+
+  try {
+    const response = await fetch(dlUrl);
+    if (!response.ok) throw new Error('Falha ao buscar o vídeo.');
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href     = blobUrl;
+    a.download = (title || 'tiktok').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') + '.mp4';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
     dlBtn.innerHTML =
-      '<span class="material-symbols-outlined" ' +
-        'style="font-size:18px;vertical-align:middle">download</span>' +
+      '<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle">check_circle</span>' +
+      ' Download concluído!';
+    dlBtn.style.opacity = '1';
+
+  } catch (err) {
+    /* Fallback: abre em nova aba se o CORS bloquear */
+    window.open(dlUrl, '_blank', 'noopener');
+    dlBtn.disabled = false;
+    dlBtn.style.opacity = '1';
+    dlBtn.innerHTML =
+      '<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle">download</span>' +
       ' Baixar · ' + quality;
-    dlBtn.style.cssText = [
-      'display:flex', 'align-items:center', 'justify-content:center', 'gap:8px',
-      'padding:13px 20px', 'border-radius:12px',
-      'background:var(--accent)', 'color:#03050a',
-      'font-size:13px', 'font-weight:700',
-      "font-family:'Inter',sans-serif",
-      'text-decoration:none', 'cursor:pointer',
-      'transition:background .2s', 'width:100%',
-    ].join(';');
-    dlBtn.onmouseover = function () { dlBtn.style.background = '#73ecd4'; };
-    dlBtn.onmouseout  = function () { dlBtn.style.background = 'var(--accent)'; };
+  }
+});
 
     wrap.append(msg, sub, dlBtn);
     rc.appendChild(wrap);
