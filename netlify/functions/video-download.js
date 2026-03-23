@@ -1,8 +1,43 @@
-/* ── video-download.js ──────────────────────────────────────────────────────
-   Recebe { url, quality } e retorna a URL de download via cobalt.tools
-   Suporta: YouTube, TikTok, Instagram, Twitter/X, Facebook e outros
-   Sem dependências extras — usa fetch nativo do Node 18+
+/* ── video-download.js (v3 — multi-instância com fallback) ─────────────────
+   Tenta cada instância pública do cobalt em sequência até uma funcionar.
+   Sem chave de API necessária.
    ──────────────────────────────────────────────────────────────────────── */
+
+const COBALT_INSTANCES = [
+  'https://cobalt.tools/',
+  'https://co.wuk.sh/',
+  'https://cobalt.imput.net/',
+  'https://cobalt.api.losttttt.xyz/',
+  'https://api.cobalt.tools/',
+];
+
+async function tryCobalt(instance, body) {
+  const res = await fetch(instance, {
+    method: 'POST',
+    headers: {
+      'Accept':       'application/json',
+      'Content-Type': 'application/json',
+      'User-Agent':   'Mozilla/5.0 (compatible; GenesisBot/1.0)',
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(12000), // 12s timeout por instância
+  });
+
+  const data = await res.json();
+
+  if (data.status === 'error' || data.error) {
+    const msg = data?.error?.code || data?.error?.message || JSON.stringify(data.error);
+    throw new Error(msg);
+  }
+
+  const downloadUrl =
+    data.url ||
+    (Array.isArray(data.picker) ? data.picker[0]?.url : null);
+
+  if (!downloadUrl) throw new Error('Sem URL na resposta.');
+
+  return downloadUrl;
+}
 
 exports.handler = async (event) => {
   const headers = {
@@ -18,61 +53,40 @@ exports.handler = async (event) => {
     const { url, quality } = JSON.parse(event.body || '{}');
     if (!url) throw new Error('URL não informada.');
 
-    const isAudio = /mp3|áudio|audio/i.test(quality);
-
-    /* ── Mapeia qualidade amigável → valor aceito pelo cobalt ── */
+    const isAudio = /mp3|áudio|audio/i.test(quality || '');
     const qualityMap = {
       '1080p': '1080', '720p': '720', '480p': '480', '360p': '360',
       'melhor qualidade': 'max',
     };
-    const vQuality = qualityMap[quality?.toLowerCase()] || '720';
+    const vQuality = qualityMap[(quality || '').toLowerCase()] || '720';
 
-    /* ── Chama cobalt.tools (API pública, sem chave) ── */
-    const cobaltRes = await fetch('https://cobalt.imput.net/', {
-      method: 'POST',
-      headers: {
-        'Accept':       'application/json',
-        'Content-Type': 'application/json',
-        'User-Agent':   'Mozilla/5.0 (compatible; GenesisBot/1.0)',
-      },
-      body: JSON.stringify({
-        url,
-        downloadMode:  isAudio ? 'audio'   : 'auto',
-        quality:       isAudio ? undefined  : vQuality,
-        audioFormat:   isAudio ? 'mp3'      : 'best',
-        filenameStyle: 'basic',
-      }),
-    });
-
-    if (!cobaltRes.ok) {
-      const errBody = await cobaltRes.text();
-      throw new Error(`cobalt retornou ${cobaltRes.status}: ${errBody.slice(0, 120)}`);
-    }
-
-    const data = await cobaltRes.json();
-
-    /* cobalt pode retornar: tunnel | redirect | stream | picker | error */
-    if (data.status === 'error' || data.error) {
-      const msg = data.error?.code || data.error || 'Erro desconhecido do cobalt.';
-      throw new Error(msg);
-    }
-
-    /* picker = múltiplos arquivos (ex: carrossel do Instagram) — pega o primeiro */
-    const downloadUrl =
-      data.url ||
-      (Array.isArray(data.urls) ? data.urls[0] : null) ||
-      (Array.isArray(data.picker) ? data.picker[0]?.url : null);
-
-    if (!downloadUrl) throw new Error('Nenhuma URL de download retornada.');
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        url:    downloadUrl,
-        status: data.status,
-      }),
+    const cobaltBody = {
+      url,
+      downloadMode:  isAudio ? 'audio'  : 'auto',
+      quality:       isAudio ? undefined : vQuality,
+      audioFormat:   isAudio ? 'mp3'    : 'best',
+      filenameStyle: 'basic',
     };
+
+    let lastError = 'Todas as instâncias falharam.';
+
+    for (const instance of COBALT_INSTANCES) {
+      try {
+        console.log(`[cobalt] tentando: ${instance}`);
+        const downloadUrl = await tryCobalt(instance, cobaltBody);
+        console.log(`[cobalt] sucesso em: ${instance}`);
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({ url: downloadUrl }),
+        };
+      } catch (err) {
+        console.warn(`[cobalt] falhou em ${instance}: ${err.message}`);
+        lastError = err.message;
+      }
+    }
+
+    throw new Error(`Nenhuma instância disponível. Último erro: ${lastError}`);
 
   } catch (err) {
     return {
