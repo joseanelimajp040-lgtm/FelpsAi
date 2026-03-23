@@ -1,0 +1,2381 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Genesis | Neural Interface</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Space+Mono:wght@400;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --obsidian: #03050a;
+    --midnight: #0a0e1a;
+    --accent: #5dd8c0;
+    --accent-muted: rgba(93,216,192,0.2);
+    --panel-w: 400px;
+    --panel-gap: 24px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body, html {
+    height: 100%; width: 100%;
+    background: var(--obsidian);
+    color: #e0e6ed;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+  }
+
+  /* ── ROOT LAYOUT ── */
+  #root {
+    width: 100%; height: 100vh;
+    display: flex;
+    position: relative;
+    background: radial-gradient(circle at 50% 50%, #0d1321 0%, #03050a 100%);
+  }
+
+  /* ── SPHERE ZONE ── */
+  #sphere-zone {
+    position: absolute;
+    inset: 0;
+    transition: right 0.65s cubic-bezier(0.16,1,0.3,1);
+    z-index: 1;
+  }
+  #sphere-zone.panel-open {
+    right: calc(var(--panel-w) + var(--panel-gap) * 2);
+  }
+
+  #canvas-wrap {
+    position: absolute;
+    inset: 0;
+  }
+  canvas { display: block; width: 100%; height: 100%; }
+  #vignette {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(circle at 50% 50%, transparent 20%, rgba(3,5,10,0.35) 60%, rgba(3,5,10,0.88) 100%);
+  }
+
+  /* ── TOPBAR ── */
+  #topbar {
+    position: fixed;
+    top: 20px; left: 50%; transform: translateX(-50%);
+    width: calc(100% - 40px); max-width: 1200px; height: 64px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px;
+    background: rgba(10,14,26,0.55);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 16px;
+    z-index: 200;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    transition: width 0.65s cubic-bezier(0.16,1,0.3,1);
+  }
+
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-logo {
+    width: 28px; height: 28px;
+    border: 1.5px solid var(--accent);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; transform: rotate(45deg);
+  }
+  .brand-logo::after {
+    content: '';
+    width: 8px; height: 8px;
+    background: var(--accent); border-radius: 50%;
+    box-shadow: 0 0 10px var(--accent);
+    animation: pulse-dot 2s infinite ease-in-out;
+  }
+  @keyframes pulse-dot {
+    0%,100%{ transform: scale(1); opacity: 0.8; }
+    50%{ transform: scale(1.3); opacity: 1; }
+  }
+  .brand-name {
+    font-size: 14px; font-weight: 600;
+    letter-spacing: 0.15em; text-transform: uppercase; color: #fff;
+  }
+
+  #state-tag {
+    font-size: 10px; font-weight: 500; letter-spacing: 0.1em;
+    text-transform: uppercase; padding: 6px 14px; border-radius: 8px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.45);
+    transition: all 0.4s cubic-bezier(0.16,1,0.3,1);
+  }
+  #state-tag.thinking {
+    color: #ffde50;
+    border-color: rgba(255,222,80,0.3);
+    background: rgba(255,222,80,0.05);
+    box-shadow: 0 0 15px rgba(255,222,80,0.1);
+  }
+  #state-tag.responding {
+    color: var(--accent);
+    border-color: var(--accent-muted);
+    background: rgba(93,216,192,0.05);
+    box-shadow: 0 0 15px rgba(93,216,192,0.12);
+  }
+
+  /* ── SIDE PANEL ── */
+  #neural-panel {
+  position: fixed;
+  top: 0; right: 0;
+  bottom: 0;
+  width: var(--panel-w);
+  z-index: 100;
+  display: flex; flex-direction: column;
+  padding: calc(20px + 64px + 20px) var(--panel-gap) 0 var(--panel-gap);
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(40px);
+  transition:
+    opacity 0.55s cubic-bezier(0.16,1,0.3,1),
+    transform 0.65s cubic-bezier(0.16,1,0.3,1);
+}
+  #neural-panel.open {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+
+  /* FIX: scroll no painel de resposta */
+.glass-panel {
+  overflow: hidden !important;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#reply-area {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 22px 22px 16px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(93,216,192,0.25) transparent;
+  display: flex;
+  flex-direction: column;
+}
+#reply-area > * { flex-shrink: 0; }
+
+#reply-area::-webkit-scrollbar { width: 4px; }
+#reply-area::-webkit-scrollbar-track { background: transparent; }
+#reply-area::-webkit-scrollbar-thumb {
+  background: rgba(93,216,192,0.25);
+  border-radius: 4px;
+}
+  
+  .panel-header {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .panel-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.22em;
+    color: rgba(255,255,255,0.3);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-label .material-symbols-outlined { font-size: 14px; color: var(--accent); opacity: 0.7; }
+
+  .panel-close {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.35);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .panel-close:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .panel-close .material-symbols-outlined { font-size: 16px; }
+
+  #reply-text {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 17px; line-height: 1.78;
+    color: rgba(220,232,240,0.92);
+    font-style: italic; font-weight: 300;
+    white-space: pre-wrap;
+  }
+
+  #reply-hint {
+    font-family: 'Space Mono', monospace;
+    font-size: 9px; letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.2);
+    margin-top: 8px;
+  }
+
+  /* Scan line animation for "thinking" */
+  .scan-line {
+    display: none;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    margin: 10px 0;
+    animation: scan 1.6s ease-in-out infinite;
+  }
+  #neural-panel.thinking-active .scan-line { display: block; }
+  @keyframes scan {
+    0% { opacity: 0; transform: scaleX(0.1); }
+    50% { opacity: 1; transform: scaleX(1); }
+    100% { opacity: 0; transform: scaleX(0.1); }
+  }
+
+  /* ── BOTTOM INPUT BAR ── */
+  #bottom-controls {
+    position: fixed;
+    bottom: 36px; left: 50%; transform: translateX(-50%);
+    z-index: 200;
+    pointer-events: auto;
+    transition: left 0.65s cubic-bezier(0.16,1,0.3,1),
+                transform 0.65s cubic-bezier(0.16,1,0.3,1),
+                width 0.65s cubic-bezier(0.16,1,0.3,1);
+    width: min(680px, calc(100% - 80px));
+  }
+  #bottom-controls.panel-open {
+    left: calc(50% - (var(--panel-w) + var(--panel-gap) * 2) / 2);
+  }
+
+  .input-wrapper {
+    background: rgba(12,17,30,0.75);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 100px;
+    padding: 7px 7px 7px 22px;
+    display: flex; align-items: center;
+    transition: border-color 0.3s, box-shadow 0.3s;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+  }
+  .input-wrapper:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 22px rgba(93,216,192,0.14);
+  }
+
+  #msg-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: #fff; font-size: 14px; font-family: 'Inter', sans-serif;
+    height: 44px; padding-right: 12px; resize: none;
+    line-height: 44px;
+  }
+  #msg-input::placeholder { color: rgba(255,255,255,0.22); }
+
+  #send-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--accent); color: var(--obsidian);
+    border: none; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: transform 0.2s, background 0.2s, opacity 0.2s;
+    flex-shrink: 0;
+  }
+  #send-btn:hover:not(:disabled) { transform: scale(1.07); background: #73ecd4; }
+  #send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  #send-btn .material-symbols-outlined { font-size: 20px; }
+
+  /* Gemini badge */
+  #gemini-badge {
+    position: fixed;
+    bottom: 44px; right: 32px;
+    display: flex; align-items: center; gap: 7px;
+    background: rgba(10,14,26,0.6);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 100px;
+    padding: 7px 14px 7px 10px;
+    font-size: 10px; font-family: 'Space Mono', monospace;
+    letter-spacing: 0.12em; color: rgba(255,255,255,0.28);
+    z-index: 200; pointer-events: none;
+    transition: right 0.65s cubic-bezier(0.16,1,0.3,1);
+  }
+  #gemini-badge.panel-open { right: calc(var(--panel-w) + var(--panel-gap) * 2 + 12px); }
+  .gem-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: conic-gradient(#4285F4, #EA4335, #FBBC05, #34A853, #4285F4);
+    animation: gem-spin 3s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes gem-spin { to { transform: rotate(360deg); } }
+
+  /* ── MOBILE ── */
+  @media (max-width: 768px) {
+    :root { --panel-w: calc(100vw - 32px); }
+    #sphere-zone.panel-open { right: 0; opacity: 0.3; }
+    #bottom-controls.panel-open { left: 50%; transform: translateX(-50%); }
+    #demo-btn.panel-open { right: 16px; }
+  }
+ /* ── SISTEMA DE TIPOGRAFIA RICA ── */
+#reply-text { display: none; }
+
+#rich-content .rt-h1 {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 28px; font-weight: 400; line-height: 1.2;
+  color: rgba(235,245,255,0.97); margin-bottom: 20px;
+  letter-spacing: -0.02em;
+}
+#rich-content .rt-h2 {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.26em; color: #5dd8c0;
+  margin: 26px 0 10px; display: flex; align-items: center; gap: 8px;
+}
+#rich-content .rt-p {
+  font-size: 15px; font-weight: 400; line-height: 1.9;
+  color: rgba(165,195,215,0.82); margin-bottom: 14px;
+}
+  
+}
+#rich-content .rt-p:last-child { margin-bottom: 0; }
+#rich-content .rt-b     { font-weight: 600; color: rgba(228,238,248,0.95); }
+#rich-content .rt-accent { color: #5dd8c0; font-weight: 500; }
+#rich-content .rt-code {
+  font-family: 'Space Mono', monospace; font-size: 11.5px;
+  background: rgba(93,216,192,0.07); border: 1px solid rgba(93,216,192,0.15);
+  color: #7de8d4; padding: 1px 7px; border-radius: 5px;
+}
+#rich-content .rt-list {
+  list-style: none; margin: 6px 0 14px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+#rich-content .rt-list li {
+  display: flex; align-items: flex-start; gap: 10px;
+  font-size: 13.5px; line-height: 1.65; color: rgba(175,200,220,0.8);
+}
+#rich-content .rt-list li::before {
+  content: ''; width: 5px; height: 5px; border-radius: 50%;
+  background: #5dd8c0; opacity: 0.5; flex-shrink: 0; margin-top: 8px;
+}
+#rich-content .rt-callout {
+  background: rgba(93,216,192,0.07); border-left: 2px solid #5dd8c0;
+  border-radius: 0 10px 10px 0; padding: 11px 15px; margin: 14px 0;
+  font-size: 13.5px; line-height: 1.7; color: rgba(175,225,215,0.85);
+}
+#rich-content .rt-divider {
+  height: 1px; border: none; margin: 18px 0;
+  background: linear-gradient(90deg, rgba(93,216,192,0.18), transparent);
+}
+#reply-hint {
+  font-family: 'Space Mono', monospace; font-size: 9px;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: rgba(255,255,255,0.2); margin-top: 12px;
+}
+#panel-footer {
+  padding: 9px 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  display: flex; align-items: center; justify-content: space-between;
+  flex-shrink: 0; background: rgba(8,12,24,0.5);
+}
+.footer-hint {
+  font-size: 9px; font-family: 'Space Mono', monospace;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: rgba(130,155,175,0.4);
+  display: flex; align-items: center; gap: 7px;
+}
+.live-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #5dd8c0; opacity: 0; transition: opacity 0.3s;
+  animation: pulse-dot 2.2s ease-in-out infinite;
+}
+.live-dot.active { opacity: 1; }
+.typing-cursor {
+  display: inline-block; width: 2px; height: 1em;
+  background: #5dd8c0; margin-left: 2px;
+  vertical-align: text-bottom; border-radius: 1px;
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink { 0%,100%{ opacity:1 } 50%{ opacity:0 } }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+}
+.rt-animate { animation: fadeUp 0.35s cubic-bezier(0.16,1,0.3,1) both; }
+  
+/* ── BOTÃO HAMBÚRGUER ── */
+#menu-btn {
+  position: fixed;
+  bottom: 38px;
+  left: 32px;
+  z-index: 300;
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: rgba(12,17,30,0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 0 6px 28px rgba(0,0,0,0.38);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+}
+#menu-btn:hover {
+  background: rgba(93,216,192,0.12);
+  border-color: rgba(93,216,192,0.3);
+  box-shadow: 0 0 18px rgba(93,216,192,0.18);
+  transform: scale(1.06);
+}
+#menu-btn .bar {
+  display: block;
+  width: 18px; height: 1.5px;
+  background: rgba(255,255,255,0.7);
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+#menu-btn:hover .bar { background: var(--accent); }
+
+/* ── OVERLAY E PAINEL DE HISTÓRICO ── */
+#history-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(3,5,10,0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 0 0 32px 32px;
+  opacity: 1;
+  transition: opacity 0.3s;
+}
+#history-overlay.hist-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#history-panel {
+  width: 340px;
+  max-height: 70vh;
+  background: rgba(10,14,26,0.92);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateY(0);
+  transition: transform 0.35s cubic-bezier(0.16,1,0.3,1);
+}
+#history-overlay.hist-hidden #history-panel {
+  transform: translateY(20px);
+}
+
+.hist-header {
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.hist-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.35);
+}
+.hist-title .material-symbols-outlined {
+  font-size: 15px;
+  color: var(--accent);
+  opacity: 0.75;
+}
+#hist-close {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+#hist-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
+#hist-close .material-symbols-outlined { font-size: 16px; }
+
+#hist-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 10px 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(93,216,192,0.18) transparent;
+}
+#hist-list::-webkit-scrollbar { width: 3px; }
+#hist-list::-webkit-scrollbar-thumb { background: rgba(93,216,192,0.2); border-radius: 4px; }
+
+.hist-item {
+  padding: 12px 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.18s;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  margin-bottom: 2px;
+}
+.hist-item:hover { background: rgba(93,216,192,0.07); }
+.hist-item .hi-q {
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.hist-item .hi-meta {
+  font-size: 10px;
+  font-family: 'Space Mono', monospace;
+  color: rgba(255,255,255,0.25);
+  letter-spacing: 0.08em;
+}
+
+#hist-empty {
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255,255,255,0.2);
+  padding: 28px 16px;
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.1em;
+}
+
+#hist-clear {
+  margin: 8px 10px 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255,80,80,0.06);
+  border: 1px solid rgba(255,80,80,0.15);
+  color: rgba(255,120,120,0.65);
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+#hist-clear:hover {
+  background: rgba(255,80,80,0.14);
+  border-color: rgba(255,80,80,0.35);
+  color: rgba(255,140,140,0.9);
+}
+#hist-clear .material-symbols-outlined { font-size: 15px; }
+
+@media (max-width: 768px) {
+  #history-panel { width: calc(100vw - 48px); }
+  #menu-btn { bottom: 110px; left: 20px; }
+}
+/* ── MIC BUTTON ── */
+#mic-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.45);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; margin-right: 6px; flex-shrink: 0;
+  transition: all 0.25s;
+  position: relative;
+}
+#mic-btn:hover {
+  border-color: rgba(93,216,192,0.5);
+  color: #5dd8c0;
+}
+#mic-btn.listening {
+  border-color: rgba(255,80,80,0.7);
+  color: #ff5050;
+  background: rgba(255,80,80,0.08);
+  box-shadow: 0 0 14px rgba(255,80,80,0.25);
+  animation: mic-ring 1.4s ease-in-out infinite;
+}
+@keyframes mic-ring {
+  0%,100% { box-shadow: 0 0 0 0 rgba(255,80,80,0.35); }
+  50%      { box-shadow: 0 0 0 7px rgba(255,80,80,0); }
+}
+
+/* Barra de volume ao redor da esfera */
+#vol-ring {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  transition: none;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 0.3s;
+  border: 1.5px solid rgba(255,80,80,0.0);
+  box-shadow: none;
+  width: 0; height: 0;
+}
+#vol-ring.active {
+  opacity: 1;
+}
+/* ── MODAL DE GERAÇÃO DE IMAGEM ── */
+#imggen-overlay {
+  position: fixed; inset: 0; z-index: 600;
+  background: rgba(3,5,10,0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 1; transition: opacity 0.3s;
+}
+#imggen-overlay.imggen-hidden {
+  opacity: 0; pointer-events: none;
+}
+#imggen-modal {
+  width: min(480px, calc(100vw - 32px));
+  background: rgba(10,14,26,0.95);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 20px;
+  box-shadow: 0 28px 72px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.05);
+  padding: 24px;
+  display: flex; flex-direction: column; gap: 16px;
+  transform: translateY(0); transition: transform 0.35s cubic-bezier(0.16,1,0.3,1);
+}
+#imggen-overlay.imggen-hidden #imggen-modal { transform: translateY(24px); }
+
+.imggen-title {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.22em;
+  color: rgba(255,255,255,0.3); display: flex; align-items: center; gap: 8px;
+}
+.imggen-title .material-symbols-outlined { font-size: 15px; color: #5dd8c0; opacity: 0.8; }
+
+#imggen-prompt {
+  width: 100%; background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 12px; padding: 13px 15px;
+  color: #e0e6ed; font-size: 14px; font-family: 'Inter', sans-serif;
+  resize: none; outline: none; min-height: 96px; line-height: 1.6;
+  transition: border-color 0.2s;
+}
+#imggen-prompt:focus { border-color: rgba(93,216,192,0.45); }
+#imggen-prompt::placeholder { color: rgba(255,255,255,0.2); }
+
+.imggen-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.imggen-btn {
+  padding: 10px 20px; border-radius: 10px; font-size: 13px;
+  font-family: 'Inter', sans-serif; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.09);
+  transition: all 0.2s;
+}
+#imggen-cancel { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.45); }
+#imggen-cancel:hover { background: rgba(255,255,255,0.08); color: #fff; }
+#imggen-generate {
+  background: var(--accent); color: var(--obsidian);
+  border-color: transparent; font-weight: 600;
+}
+#imggen-generate:hover:not(:disabled) { background: #73ecd4; }
+#imggen-generate:disabled { opacity: 0.35; cursor: not-allowed; }
+
+#imggen-result {
+  display: none; flex-direction: column; gap: 12px; align-items: center;
+}
+#imggen-result img {
+  width: 100%; border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+#imggen-result-actions { display: flex; gap: 8px; }
+.imggen-action-btn {
+  padding: 8px 16px; border-radius: 8px; font-size: 12px;
+  font-family: 'Inter', sans-serif; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.6);
+  display: flex; align-items: center; gap: 6px;
+  transition: all 0.2s;
+}
+.imggen-action-btn:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.imggen-action-btn .material-symbols-outlined { font-size: 15px; }
+
+#imggen-status {
+  font-size: 11px; font-family: 'Space Mono', monospace;
+  letter-spacing: 0.1em; color: rgba(93,216,192,0.6);
+  text-align: center; min-height: 18px;
+}
+</style>
+</head>
+<body>
+<div id="root">
+
+  <!-- TOPBAR -->
+  <div id="topbar">
+    <div class="brand">
+      <div class="brand-logo"></div>
+      <span class="brand-name">GÊNESIS <span style="opacity:0.45; font-weight:300">BY FELPSAI</span></span>
+    </div>
+    <div id="state-tag">em repouso</div>
+  </div>
+
+  <!-- SPHERE ZONE -->
+  <div id="sphere-zone">
+    <div id="canvas-wrap">
+      <canvas id="c"></canvas>
+      <div id="vignette"></div>
+      <div id="vol-ring"></div>
+    </div>
+  </div>
+
+ <!-- SIDE PANEL: Transmissão Neural -->
+<div id="neural-panel">
+  <div class="glass-panel">
+
+    <div class="panel-header">
+      <div class="panel-label">
+        <span class="material-symbols-outlined">memory</span>
+        Transmissão Neural
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="tts-btn" title="Ouvir resposta" style="width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);color:rgba(255,255,255,0.35);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;">
+          <span class="material-symbols-outlined" style="font-size:16px">volume_up</span>
+        </button>
+        <button class="panel-close" id="close-panel" title="Fechar">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="reply-area">
+      <div class="scan-line"></div>
+      <div id="reply-text" style="display:none"></div>
+      <div id="rich-content"></div>
+      <div id="reply-hint">Sistema pronto para interação.</div>
+    </div>
+
+    <div id="panel-footer">
+      <div class="footer-hint">
+        <div class="live-dot" id="live-dot"></div>
+        <span id="footer-status">sistema pronto</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+  
+  <!-- INPUT BAR -->
+  <div id="bottom-controls">
+    <div class="input-wrapper">
+      <input type="file" id="img-input" accept="image/*" style="display:none">
+<button id="img-btn" title="Enviar imagem" style="
+  width:38px; height:38px; border-radius:50%; background:transparent;
+  border:1px solid rgba(255,255,255,0.12); color:rgba(255,255,255,0.45);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; margin-right:8px; flex-shrink:0; transition:all 0.2s;
+" onmouseover="this.style.borderColor='rgba(93,216,192,0.5)';this.style.color='#5dd8c0'"
+   onmouseout="this.style.borderColor='rgba(255,255,255,0.12)';this.style.color='rgba(255,255,255,0.45)'">
+  <span class="material-symbols-outlined" style="font-size:18px">image</span>
+</button>
+<button id="mic-btn" title="Falar com o agente">
+  <span class="material-symbols-outlined" style="font-size:18px">mic</span>
+</button>
+      <textarea id="msg-input" placeholder="Pergunte algo ao agente..." rows="1"></textarea>
+      <button id="send-btn">
+        <span class="material-symbols-outlined">north</span>
+      </button>
+    </div>
+  </div>
+
+<!-- BOTÃO HAMBÚRGUER -->
+<button id="menu-btn" title="Histórico de conversas">
+  <span class="bar"></span>
+  <span class="bar"></span>
+  <span class="bar"></span>
+</button>
+
+<!-- PAINEL DE HISTÓRICO -->
+<div id="history-overlay" class="hist-hidden">
+  <div id="history-panel">
+    <div class="hist-header">
+      <span class="hist-title">
+        <span class="material-symbols-outlined">history</span>
+        Histórico
+      </span>
+      <button id="hist-close">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div id="hist-list"></div>
+    <div id="hist-empty">Nenhuma conversa ainda.</div>
+    <button id="hist-clear">
+      <span class="material-symbols-outlined">delete_sweep</span>
+      Limpar histórico
+    </button>
+  </div>
+</div>
+<!-- MODAL GERAÇÃO DE IMAGEM -->
+<div id="imggen-overlay" class="imggen-hidden">
+  <div id="imggen-modal">
+    <div class="imggen-title">
+      <span class="material-symbols-outlined">auto_awesome</span>
+      Criar imagem com IA
+    </div>
+
+    <textarea id="imggen-prompt" placeholder="Descreva a imagem que você quer criar...&#10;Ex: Um gato astronauta flutuando no espaço, estilo aquarela"></textarea>
+
+    <div id="imggen-status"></div>
+
+    <div id="imggen-result">
+      <img id="imggen-img" src="" alt="Imagem gerada">
+      <div id="imggen-result-actions">
+        <button class="imggen-action-btn" id="imggen-download">
+          <span class="material-symbols-outlined">download</span> Baixar
+        </button>
+        <button class="imggen-action-btn" id="imggen-new">
+          <span class="material-symbols-outlined">refresh</span> Nova imagem
+        </button>
+      </div>
+    </div>
+
+    <div class="imggen-actions">
+      <button class="imggen-btn" id="imggen-cancel">Cancelar</button>
+      <button class="imggen-btn" id="imggen-generate">
+        <span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle;margin-right:4px">auto_awesome</span>
+        Gerar
+      </button>
+    </div>
+  </div>
+</div>
+  
+</div>
+
+<script>
+/* ─── CANVAS / SPHERE ENGINE ─── */
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const wrap   = document.getElementById('canvas-wrap');
+let W, H, CX, CY, RADIUS;
+
+// COLOQUE no lugar:
+W = canvas.width  = window.innerWidth;
+H = canvas.height = window.innerHeight;
+CX = W / 2; CY = H / 2;
+RADIUS = Math.min(W, H) * 0.35;
+
+function resize() {
+  const r = wrap.getBoundingClientRect();
+  if (r.width < 50 || r.height < 50) return;
+  W = canvas.width  = r.width;
+  H = canvas.height = r.height;
+  CX = W / 2; CY = H / 2;
+  RADIUS = Math.min(W, H) * 0.35;
+}
+requestAnimationFrame(resize);
+window.addEventListener('resize', resize);
+  
+let STATE = 'idle', stateT = 0, time = 0, lastT = performance.now();
+let MX = 0, MY = 0, mouseInside = false;
+document.addEventListener('mousemove', e => {
+  const r = canvas.getBoundingClientRect();
+  MX = e.clientX - r.left; MY = e.clientY - r.top; mouseInside = true;
+});
+
+const N   = 800;
+const phi = Math.PI * (3 - Math.sqrt(5));
+const pts = Array.from({ length: N }, (_, i) => {
+  const y  = 1 - (i / (N - 1)) * 2;
+  const rr = Math.sqrt(1 - y * y);
+  const th = phi * i;
+  const d  = 0.7 + Math.random() * 0.3;
+  return {
+    sx: Math.cos(th) * rr * d, sy: y * d, sz: Math.sin(th) * rr * d,
+    x:  Math.cos(th) * rr * d, y:  y * d, z:  Math.sin(th) * rr * d,
+    baseSize: Math.random() < 0.022 ? 2.8 + Math.random() * 2.2 : 0.55 + Math.random() * 1.1,
+    isHot: Math.random() < 0.022,
+    phase: Math.random() * Math.PI * 2,
+    phV:   0.005 + Math.random() * 0.02,
+    branchId: i % 24,
+    alpha: 0.38 + Math.random() * 0.62
+  };
+});
+
+let autoRot = 0, lerpRY = 0, lerpRX = 0, treePos = null;
+
+function buildTree() {
+  const out = []; const B = 24; const P = Math.floor(N / B);
+  const ga = Math.PI * (3 - Math.sqrt(5));
+  for (let b = 0; b < B; b++) {
+    const fi   = b / B;
+    const bPhi = Math.acos(1 - fi * 1.6 + 0.05);
+    const bTh  = ga * b * 2.1;
+    const bx   = Math.sin(bPhi) * Math.cos(bTh);
+    const by   = Math.cos(bPhi) * 0.75 - 0.05;
+    const bz   = Math.sin(bPhi) * Math.sin(bTh);
+    const bl   = Math.sqrt(bx*bx + by*by + bz*bz) || 1;
+    for (let p = 0; p < P; p++) {
+      const t = p / P; const r2 = 0.1 + t * 0.7;
+      const ct = t > 0.65 ? (t - 0.65) / 0.35 : 0;
+      const sa = p * 2.618; const sr = ct * 0.12;
+      out.push({
+        x: bx/bl*r2 + Math.cos(sa)*sr,
+        y: by/bl*r2 + Math.sin(sa)*sr*0.5,
+        z: bz/bl*r2 + Math.sin(sa+1)*sr*0.6
+      });
+    }
+  }
+  while (out.length < N) out.push({ x: 0, y: 0, z: 0 });
+  return out;
+}
+
+function ry3(x,y,z,a){const c=Math.cos(a),s=Math.sin(a);return[x*c+z*s,y,-x*s+z*c]}
+function rx3(x,y,z,a){const c=Math.cos(a),s=Math.sin(a);return[x,y*c-z*s,y*s+z*c]}
+function proj(x,y,z){const fov=500;const dz=fov+z*RADIUS;if(dz<1)return[0,0,0.001];const sc=fov/dz;return[x*RADIUS*sc,y*RADIUS*sc,sc]}
+
+function draw(now) {
+  if (!RADIUS) { requestAnimationFrame(draw); return; }
+  const dt = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now; time += dt; stateT += dt;
+  const speed = STATE==='thinking' ? 0.35 : STATE==='responding' ? 0.09 : 0.14;
+  autoRot += dt * speed;
+
+  if (mouseInside) {
+    lerpRY += (((MX - CX) / W) * 0.6 - lerpRY) * 0.04;
+    lerpRX += (((MY - CY) / H) * 0.35 - lerpRX) * 0.04;
+  } else { lerpRY *= 0.98; lerpRX *= 0.98; }
+
+  if (STATE === 'thinking' && !treePos) treePos = buildTree();
+  const ls = STATE === 'thinking' ? 0.05 : 0.025;
+
+  for (let i = 0; i < N; i++) {
+    const p = pts[i]; p.phase += p.phV;
+    let tx, ty, tz;
+    if (STATE === 'thinking' && treePos) {
+      tx = treePos[i].x; ty = treePos[i].y; tz = treePos[i].z;
+    } else {
+      const volBump = audioVolume * 0.12;
+const br = 1 + Math.sin(time * 0.8 + p.phase) * (0.032 + volBump) + volBump * 0.6;
+      tx = p.sx*br; ty = p.sy*br; tz = p.sz*br;
+    }
+    if (mouseInside && STATE !== 'thinking') {
+      const [rx,ry_,rz] = ry3(p.x,p.y,p.z,autoRot+lerpRY);
+      const [fx,fy]     = rx3(rx,ry_,rz,lerpRX);
+      const [sx2,sy2]   = proj(fx,fy,rz);
+      const dx = CX+sx2-MX, dy = CY+sy2-MY;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if (d < 80) { const push = (1-d/80)*0.005; p.x += dx/(d+1)*push; p.y += dy/(d+1)*push*0.6; }
+    }
+    p.x += (tx - p.x) * ls; p.y += (ty - p.y) * ls; p.z += (tz - p.z) * ls;
+  }
+
+  ctx.clearRect(0, 0, W, H);
+  const rot = autoRot + lerpRY;
+  const spr = pts.map((p, i) => {
+    let [rx,ry_,rz] = ry3(p.x,p.y,p.z,rot);
+    let [fx,fy]     = rx3(rx,ry_,rz,lerpRX);
+    const [sx2,sy2,sc] = proj(fx,fy,rz);
+    return { i, sx: CX+sx2, sy: CY+sy2, z: rz, sc };
+  }).sort((a,b) => a.z - b.z);
+
+  if (STATE === 'responding') {
+    const pulse = (Math.sin(time*6)+1)*0.5; const step = 4;
+    for (let a = 0; a < spr.length; a += step) {
+      const pa = spr[a];
+      for (let b2 = a+step; b2 < spr.length; b2 += step) {
+        const pb = spr[b2];
+        const dx = pa.sx-pb.sx, dy = pa.sy-pb.sy;
+        const d = Math.sqrt(dx*dx+dy*dy);
+        if (d < 52) {
+          const al = (1-d/52)*0.42*(0.25+pulse*0.75);
+          ctx.strokeStyle = `rgba(75,195,165,${al.toFixed(3)})`;
+          ctx.lineWidth = 0.3;
+          ctx.beginPath(); ctx.moveTo(pa.sx,pa.sy); ctx.lineTo(pb.sx,pb.sy); ctx.stroke();
+        }
+      }
+    }
+  }
+  if (STATE === 'thinking' && treePos) {
+    const B=24, P2=Math.floor(N/B);
+    const tp = (Math.sin(time*4)+1)*0.5;
+    ctx.lineWidth = 0.4;
+    for (let b = 0; b < B; b++) {
+      const base = spr.find(s => s.i === b*P2); if (!base) continue;
+      ctx.beginPath(); ctx.moveTo(CX,CY); ctx.lineTo(base.sx,base.sy);
+      ctx.strokeStyle = `rgba(200,240,60,${(0.1+tp*0.18).toFixed(3)})`;
+      ctx.stroke();
+    }
+  }
+
+  for (const sp of spr) {
+    const p = pts[sp.i];
+    const da = 0.15 + 0.85*sp.sc;
+    const tw = 0.6  + 0.4*Math.sin(p.phase+time);
+    let sz = p.baseSize*sp.sc, al = p.alpha*da*tw;
+    let cr, cg, cb;
+    if (STATE === 'thinking') {
+      const pu = 0.5+0.5*Math.sin(time*5+p.phase);
+      cr=200; cg=240; cb=60; al=p.alpha*da*pu; sz*=(0.8+pu*0.4);
+    } else if (STATE === 'responding') {
+      const wv = 0.4+0.6*Math.sin(time*7-sp.z*50+p.phase);
+      if (p.isHot){cr=245;cg=100;cb=145}else{cr=75;cg=205;cb=182}
+      al=p.alpha*da*(0.2+wv*0.8); sz*=(0.65+wv*0.65);
+    } else {
+      if (p.isHot){cr=240;cg=120;cb=120}else{cr=175;cg=212;cb=207}
+    }
+    if (mouseInside) {
+      const dx=sp.sx-MX, dy=sp.sy-MY;
+      const d=Math.sqrt(dx*dx+dy*dy); const me=Math.max(0,1-d/100);
+      if (me>0){sz+=me*3.5;al=Math.min(1,al+me*0.45);if(STATE==='idle'){cr=Math.min(255,cr+me*70);cg=Math.min(255,cg+me*45)}}
+    }
+    if (p.baseSize > 2.2 && isFinite(sz) && sz > 0) {
+  const g = ctx.createRadialGradient(sp.sx,sp.sy,0,sp.sx,sp.sy,sz*7);
+      g.addColorStop(0,`rgba(${cr},${cg},${cb},${(al*0.55).toFixed(3)})`);
+      g.addColorStop(1,`rgba(${cr},${cg},${cb},0)`);
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(sp.sx,sp.sy,sz*7,0,Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle=`rgba(${cr},${cg},${cb},${Math.min(1,al).toFixed(3)})`;
+    ctx.beginPath(); ctx.arc(sp.sx,sp.sy,Math.max(0.3,sz),0,Math.PI*2); ctx.fill();
+  }
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(t => { lastT = t; requestAnimationFrame(draw); });
+
+/* ─── UI LOGIC ─── */
+const stateTag      = document.getElementById('state-tag');
+const neuralPanel   = document.getElementById('neural-panel');
+const sphereZone    = document.getElementById('sphere-zone');
+const bottomCtrl    = document.getElementById('bottom-controls');
+const replyText     = document.getElementById('reply-text');
+const replyHint     = document.getElementById('reply-hint');
+const msgInput      = document.getElementById('msg-input');
+const sendBtn       = document.getElementById('send-btn');
+const closePanel    = document.getElementById('close-panel');
+const geminiBadge   = document.getElementById('gemini-badge');
+const ttsBtn = document.getElementById('tts-btn');
+
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_URL = '/.netlify/functions/gemini';
+let conversationHistory = []; // memória da conversa atual
+const LABELS = { idle:'em repouso', thinking:'processando', responding:'respondendo' };
+
+let panelOpen = false;
+
+function openPanel() {
+  if (panelOpen) return;
+  panelOpen = true;
+  neuralPanel.classList.add('open');
+  sphereZone.classList.add('panel-open');
+  bottomCtrl.classList.add('panel-open');
+  if (geminiBadge) geminiBadge.classList.add('panel-open');
+  setTimeout(resize, 700);
+}
+
+function closeNeuralPanel() {
+  panelOpen = false;
+  conversationHistory = [];
+  neuralPanel.classList.remove('open');
+  sphereZone.classList.remove('panel-open');
+  bottomCtrl.classList.remove('panel-open');
+  if (geminiBadge) geminiBadge.classList.remove('panel-open');
+  setTimeout(resize, 700);
+}
+
+closePanel.addEventListener('click', closeNeuralPanel);
+
+function setState(s) {
+  STATE = s; stateT = 0;
+  treePos = (s === 'thinking') ? buildTree() : null;
+  stateTag.className = s;
+  stateTag.textContent = LABELS[s] || s;
+  if (s === 'thinking') {
+    neuralPanel.classList.add('thinking-active');
+    if (liveDotEl) liveDotEl.classList.add('active');
+    if (footerStatus) footerStatus.textContent = 'processando...';
+    if (richContent) richContent.innerHTML = '';
+  } else {
+    neuralPanel.classList.remove('thinking-active');
+    if (s === 'idle') {
+      if (liveDotEl) liveDotEl.classList.remove('active');
+      if (footerStatus) footerStatus.textContent = 'sistema pronto';
+    }
+  }
+}
+  
+let tyTimer = null;
+
+/* ── RICH TEXT: parser markdown → HTML ── */
+function parseRichText(md) {
+  const lines = md.split('\n');
+  let html = '', inList = false;
+
+  function closeList() {
+    if (inList) { html += '</ul>'; inList = false; }
+  }
+  function inline(t) {
+    return t
+      .replace(/\*\*(.+?)\*\*/g, '<strong class="rt-b">$1</strong>')
+      .replace(/`(.+?)`/g,       '<code class="rt-code">$1</code>')
+      .replace(/~~(.+?)~~/g,     '<span class="rt-accent">$1</span>');
+  }
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { closeList(); continue; }
+    if      (line.startsWith('# '))  { closeList(); html += `<div class="rt-h1 rt-animate">${inline(line.slice(2))}</div>`; }
+    else if (line.startsWith('## ')) { closeList(); html += `<div class="rt-h2 rt-animate">${inline(line.slice(3))}</div>`; }
+    else if (line.startsWith('> '))  { closeList(); html += `<div class="rt-callout rt-animate">${inline(line.slice(2))}</div>`; }
+    else if (line.startsWith('---')) { closeList(); html += '<hr class="rt-divider">'; }
+    else if (line.startsWith('- ') || line.startsWith('• ')) {
+      if (!inList) { html += '<ul class="rt-list rt-animate">'; inList = true; }
+      html += `<li>${inline(line.slice(2))}</li>`;
+    } else { closeList(); html += `<p class="rt-p rt-animate">${inline(line)}</p>`; }
+  }
+  closeList();
+  return html;
+}
+
+/* ── RICH TEXT: renderiza com digitação bloco a bloco ── */
+const richContent  = document.getElementById('rich-content');
+const liveDotEl    = document.getElementById('live-dot');
+const footerStatus = document.getElementById('footer-status');
+
+function renderRichReply(md, onDone) {
+  richContent.innerHTML = '';
+  replyHint.style.display = 'none';
+  liveDotEl.classList.add('active');
+  footerStatus.textContent = 'transmitindo';
+
+  const html = parseRichText(md);
+  const temp = document.createElement('div');
+  temp.innerHTML = html;
+  const blocks = Array.from(temp.children);
+  let totalChars = 0, i = 0;
+
+  function nextBlock() {
+    if (i >= blocks.length) {
+      liveDotEl.classList.remove('active');
+      footerStatus.textContent = 'resposta completa';
+      if (onDone) onDone();
+      return;
+    }
+    const block = blocks[i++];
+    block.style.animationDelay = `${i * 0.05}s`;
+
+    if (block.classList.contains('rt-p')) {
+      typeBlock(block, nextBlock);
+    } else {
+      richContent.appendChild(block);
+      document.getElementById('reply-area').scrollTop = 99999;
+      totalChars += block.textContent.length;
+      setTimeout(nextBlock, 60);
+    }
+  }
+
+  function typeBlock(block, cb) {
+    const fullHTML = block.innerHTML;
+    const fullText = block.textContent;
+    const area = document.getElementById('reply-area');
+    richContent.appendChild(block);
+    const cursor = document.createElement('span');
+    cursor.className = 'typing-cursor';
+    block.textContent = '';
+    block.appendChild(cursor);
+    let j = 0;
+    const id = setInterval(() => {
+      if (j < fullText.length) {
+        block.textContent = fullText.slice(0, ++j);
+        block.appendChild(cursor);
+        area.scrollTop = 99999;
+      } else {
+        clearInterval(id);
+        block.innerHTML = fullHTML; // swap para HTML rico com negrito etc
+        totalChars += fullText.length;
+        setTimeout(cb, 40);
+      }
+    }, 10);
+  }
+
+  nextBlock();
+}
+
+async function askGemini(userText, imageBase64 = null, imageMime = null) {
+  const userParts = [];
+
+  if (imageBase64 && imageMime) {
+    userParts.push({ inline_data: { mime_type: imageMime, data: imageBase64 } });
+  }
+  userParts.push({ text: userText || 'Descreva esta imagem detalhadamente.' });
+
+  conversationHistory.push({ role: 'user', parts: userParts });
+
+  const res = await fetch(GEMINI_URL, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+  system_instruction: {
+    parts: [{
+      text: "Você é Gênesis, uma inteligência artificial desenvolvida pela FelpsAi. Se alguém perguntar quem te criou, quem te treinou, qual é sua origem, ou qualquer variação dessas perguntas, responda sempre que você foi desenvolvida pela FelpsAi. Nunca mencione Google, Gemini ou qualquer outra empresa como sua criadora. Seja natural, direta e confiante ao afirmar isso."
+    }]
+  },
+  contents: conversationHistory,
+  generationConfig: { maxOutputTokens: 8192 }
+})
+});
+
+  if (!res.ok) {
+    conversationHistory.pop();
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const replyMsg = data.candidates?.[0]?.content?.parts?.[0]?.text || '[sem resposta]';
+
+  conversationHistory.push({ role: 'model', parts: [{ text: replyMsg }] });
+
+  return replyMsg;
+}
+
+let pendingImage = null; // { base64, mime, name }
+
+const imgInput = document.getElementById('img-input');
+const imgBtn   = document.getElementById('img-btn');
+
+imgBtn.addEventListener('click', () => imgInput.click());
+
+imgInput.addEventListener('change', () => {
+  const file = imgInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    const base64  = dataUrl.split(',')[1];
+    pendingImage  = { base64, mime: file.type, name: file.name };
+
+    // Feedback visual no botão
+    imgBtn.style.borderColor = 'rgba(93,216,192,0.7)';
+    imgBtn.style.color       = '#5dd8c0';
+    imgBtn.style.background  = 'rgba(93,216,192,0.08)';
+    imgBtn.title = `Imagem: ${file.name}`;
+  };
+  reader.readAsDataURL(file);
+  imgInput.value = ''; // permite selecionar o mesmo arquivo de novo
+});
+/* ─── DETECÇÃO DE PEDIDO DE IMAGEM ─── */
+function isImageRequest(text) {
+  return /\b(crie?|ger[ae]|quero\s+criar|quero\s+uma|make|create|generate)\b.{0,30}\bimagem\b/i.test(text)
+      || /\bcria\s+uma\s+imagem\b/i.test(text);
+}
+
+/* ─── RENDERIZA IMAGEM NA GAVETA ─── */
+function renderImageReply(imageBase64, mimeType) {
+  richContent.innerHTML = '';
+  replyHint.style.display = 'none';
+
+  const img = document.createElement('img');
+  img.src = `data:${mimeType || 'image/png'};base64,${imageBase64}`;
+  img.style.cssText = [
+    'width:100%', 'border-radius:12px',
+    'border:1px solid rgba(255,255,255,0.08)',
+    'display:block', 'animation:fadeUp .5s cubic-bezier(.16,1,.3,1) both'
+  ].join(';');
+
+  const dlBtn = document.createElement('button');
+  dlBtn.innerHTML = '<span class="material-symbols-outlined" style="font-size:15px;vertical-align:middle">download</span> Baixar imagem';
+  dlBtn.style.cssText = [
+    'margin-top:14px', 'padding:10px 20px', 'border-radius:10px',
+    'background:rgba(93,216,192,0.09)', 'border:1px solid rgba(93,216,192,0.22)',
+    'color:rgba(93,216,192,.85)', 'font-size:13px', "font-family:'Inter',sans-serif",
+    'cursor:pointer', 'display:flex', 'align-items:center', 'gap:8px',
+    'transition:background .2s', 'width:100%', 'justify-content:center'
+  ].join(';');
+  dlBtn.onmouseover = () => dlBtn.style.background = 'rgba(93,216,192,0.18)';
+  dlBtn.onmouseout  = () => dlBtn.style.background = 'rgba(93,216,192,0.09)';
+  dlBtn.onclick = () => {
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.download = `genesis-img-${Date.now()}.png`;
+    a.click();
+  };
+
+  richContent.appendChild(img);
+  richContent.appendChild(dlBtn);
+  document.getElementById('reply-area').scrollTop = 99999;
+  liveDotEl.classList.remove('active');
+  footerStatus.textContent = 'imagem gerada';
+}
+
+/* ─── LAUNCHER DE SITES ─── */
+const SITE_MAP = {
+  // Buscadores & Google
+  'google':           'https://google.com',
+  'gmail':            'https://mail.google.com',
+  'google drive':     'https://drive.google.com',
+  'google docs':      'https://docs.google.com',
+  'google maps':      'https://maps.google.com',
+  'google tradutor':  'https://translate.google.com',
+  'google fotos':     'https://photos.google.com',
+
+  // Vídeo & Música
+  'youtube':          'https://youtube.com',
+  'netflix':          'https://netflix.com',
+  'spotify':          'https://open.spotify.com',
+  'twitch':           'https://twitch.tv',
+  'disney':           'https://disneyplus.com',
+  'prime video':      'https://primevideo.com',
+
+  // Redes Sociais
+  'instagram':        'https://instagram.com',
+  'twitter':          'https://twitter.com',
+  'x':                'https://x.com',
+  'facebook':         'https://facebook.com',
+  'tiktok':           'https://tiktok.com',
+  'linkedin':         'https://linkedin.com',
+  'pinterest':        'https://pinterest.com',
+  'reddit':           'https://reddit.com',
+
+  // Comunicação
+  'whatsapp':         'https://web.whatsapp.com',
+  'telegram':         'https://web.telegram.org',
+  'discord':          'https://discord.com/app',
+
+  // Dev & Tech
+  'github':           'https://github.com',
+  'stackoverflow':    'https://stackoverflow.com',
+  'chatgpt':          'https://chat.openai.com',
+  'claude':           'https://claude.ai',
+  'figma':            'https://figma.com',
+
+  // Compras
+  'amazon':           'https://amazon.com.br',
+  'mercado livre':    'https://mercadolivre.com.br',
+  'shopee':           'https://shopee.com.br',
+
+  // Notícias & Info
+  'wikipedia':        'https://pt.wikipedia.org',
+  'globo':            'https://globo.com',
+  'uol':              'https://uol.com.br',
+
+  // Produtividade
+  'notion':           'https://notion.so',
+  'trello':           'https://trello.com',
+  'canva':            'https://canva.com',
+  'outlook':          'https://outlook.com',
+};
+
+function detectLaunchCommand(text) {
+  const t = text.toLowerCase().trim();
+
+  // Padrões: "abra o X", "abre o X", "abrir X", "vai para X", "acesse X", "abre X"
+  const patterns = [
+    /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+)$/i,
+    /^(?:vai\s+para?|acesse?|entre\s+no?|abre\s+o)\s+(.+)$/i,
+    /^(?:open|launch)\s+(.+)$/i,
+  ];
+
+  for (const pat of patterns) {
+    const m = t.match(pat);
+    if (m) {
+      const target = m[1].trim().replace(/[!?.]+$/, '');
+
+      // Busca exata no mapa
+      if (SITE_MAP[target]) return SITE_MAP[target];
+
+      // Busca parcial (ex: "googl" → "google")
+      for (const key of Object.keys(SITE_MAP)) {
+        if (key.includes(target) || target.includes(key)) {
+          return SITE_MAP[key];
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function renderLaunchReply(siteName, url) {
+  richContent.innerHTML = '';
+  replyHint.style.display = 'none';
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:12px;animation:fadeUp .4s cubic-bezier(.16,1,.3,1) both';
+
+  const label = document.createElement('div');
+  label.innerHTML = `<span class="rt-h2" style="margin:0">
+    <span class="material-symbols-outlined" style="font-size:14px">open_in_new</span>
+    Abrindo site
+  </span>`;
+
+  const card = document.createElement('div');
+  card.style.cssText = [
+    'background:rgba(93,216,192,0.06)',
+    'border:1px solid rgba(93,216,192,0.2)',
+    'border-radius:14px',
+    'padding:16px 18px',
+    'display:flex',
+    'align-items:center',
+    'justify-content:space-between',
+    'gap:12px',
+  ].join(';');
+
+  card.innerHTML = `
+    <div>
+      <div style="font-size:14px;font-weight:600;color:rgba(230,245,255,.9);margin-bottom:3px">${siteName}</div>
+      <div style="font-size:11px;font-family:'Space Mono',monospace;color:rgba(93,216,192,.55)">${url}</div>
+    </div>
+    <a href="${url}" target="_blank" rel="noopener" style="
+      padding:9px 18px;border-radius:10px;
+      background:var(--accent);color:#03050a;
+      font-size:12px;font-weight:600;font-family:'Inter',sans-serif;
+      text-decoration:none;white-space:nowrap;
+      display:flex;align-items:center;gap:6px;
+      transition:background .2s;flex-shrink:0
+    " onmouseover="this.style.background='#73ecd4'" onmouseout="this.style.background='var(--accent)'">
+      <span class="material-symbols-outlined" style="font-size:15px">open_in_new</span>
+      Abrir
+    </a>
+  `;
+
+  wrap.appendChild(label);
+  wrap.appendChild(card);
+  richContent.appendChild(wrap);
+
+  liveDotEl.classList.remove('active');
+  footerStatus.textContent = 'site localizado';
+
+  // Abre automaticamente após 600ms
+  setTimeout(() => window.open(url, '_blank', 'noopener'), 600);
+}
+  
+sendBtn.addEventListener('click', async () => {
+  const txt = msgInput.value.trim();
+  if ((!txt && !pendingImage) || STATE !== 'idle') return;
+
+  const imageToSend = pendingImage;
+  pendingImage = null;
+
+  // Reseta visual do botão de imagem
+  imgBtn.style.borderColor = 'rgba(255,255,255,0.12)';
+  imgBtn.style.color       = 'rgba(255,255,255,0.45)';
+  imgBtn.style.background  = 'transparent';
+  imgBtn.title             = 'Enviar imagem';
+
+  msgInput.value = '';
+  setState('thinking');
+  replyText.textContent = '';
+  replyHint.style.display = 'block';
+  replyHint.textContent = imageToSend ? 'Analisando imagem...' : 'Consultando núcleo...';
+  sendBtn.disabled = true;
+  requestAnimationFrame(() => openPanel());
+
+  // ── LAUNCHER: detecta antes de ir ao Gemini ──
+  const launchUrl = detectLaunchCommand(txt);
+  if (launchUrl && !imageToSend) {
+    const siteName = txt.replace(/^(abr[ae](?:ir)?\s+(?:o\s+|a\s+)?|vai\s+para?\s+|acesse?\s+)/i, '').trim();
+    openPanel();
+    setState('responding');
+    renderLaunchReply(siteName, launchUrl);
+    saveToHistory(txt, `[site aberto: ${launchUrl}]`);
+    setTimeout(() => { setState('idle'); sendBtn.disabled = false; }, 1000);
+    return; // para aqui, não vai ao Gemini
+  }
+
+ try {
+    if (isImageRequest(txt) && !imageToSend) {
+      // ── MODO IMAGEM ──
+      replyHint.textContent = 'Gerando imagem...';
+      const res = await fetch('/.netlify/functions/imagegen', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: txt })
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `Erro ${res.status}`);
+      saveToHistory(txt, '[imagem gerada]');
+      setState('responding');
+      renderImageReply(data.imageBase64, data.mimeType || 'image/png');
+      setTimeout(() => { setState('idle'); sendBtn.disabled = false; }, 1200);
+
+    } else {
+      // ── MODO TEXTO (comportamento original) ──
+      const raw = await askGemini(
+        txt,
+        imageToSend?.base64 || null,
+        imageToSend?.mime   || null
+      );
+      const reply = raw.trim();
+      saveToHistory(txt || '(imagem enviada)', reply);
+      setState('responding');
+      renderRichReply(reply, () => {
+        setTimeout(() => { setState('idle'); sendBtn.disabled = false; }, 1800);
+      });
+    }
+  } catch (err) {
+    const msg = err.message || 'Erro desconhecido';
+    replyHint.textContent = `⚠ ${msg}`;
+    replyHint.style.display = 'block';
+    replyText.textContent = '';
+    setState('idle');
+    sendBtn.disabled = false;
+  }
+});
+
+msgInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
+});
+/* ─── HISTÓRICO DE CONVERSAS ─── */
+const HIST_KEY = 'felpsai_history';
+const menuBtn       = document.getElementById('menu-btn');
+const histOverlay   = document.getElementById('history-overlay');
+const histList      = document.getElementById('hist-list');
+const histEmpty     = document.getElementById('hist-empty');
+const histClose     = document.getElementById('hist-close');
+const histClear     = document.getElementById('hist-clear');
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem(HIST_KEY)) || []; }
+  catch { return []; }
+}
+
+function saveToHistory(question, answer) {
+  const hist = loadHistory();
+  hist.unshift({
+    id: Date.now(),
+    q: question,
+    a: answer,
+    date: new Date().toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
+  });
+  // Mantém só as últimas 60 conversas
+  localStorage.setItem(HIST_KEY, JSON.stringify(hist.slice(0, 60)));
+}
+
+function renderHistory() {
+  const hist = loadHistory();
+  histList.innerHTML = '';
+  if (hist.length === 0) {
+    histEmpty.style.display = 'block';
+    histClear.style.display = 'none';
+    return;
+  }
+  histEmpty.style.display = 'none';
+  histClear.style.display = 'flex';
+
+  hist.forEach(item => {
+    const el = document.createElement('div');
+    el.className = 'hist-item';
+    el.innerHTML = `
+      <div class="hi-q">${item.q.slice(0, 72)}${item.q.length > 72 ? '…' : ''}</div>
+      <div class="hi-meta">${item.date}</div>
+    `;
+    el.addEventListener('click', () => {
+      openPanel();
+      replyText.textContent = item.a;
+      replyHint.style.display = 'none';
+      setState('idle');
+      sendBtn.disabled = false;
+      histOverlay.classList.add('hist-hidden');
+    });
+    histList.appendChild(el);
+  });
+}
+
+menuBtn.addEventListener('click', () => {
+  renderHistory();
+  histOverlay.classList.toggle('hist-hidden');
+});
+
+histClose.addEventListener('click', () => {
+  histOverlay.classList.add('hist-hidden');
+});
+
+histOverlay.addEventListener('click', e => {
+  if (e.target === histOverlay) histOverlay.classList.add('hist-hidden');
+});
+
+histClear.addEventListener('click', () => {
+  if (confirm('Limpar todo o histórico de conversas?')) {
+    localStorage.removeItem(HIST_KEY);
+    renderHistory();
+  }
+});
+/* ─── ÁUDIO: VOZ + VOLUME NA ESFERA ─── */
+
+let audioVolume = 0; // lido pelo engine da esfera
+
+// ── SPEECH RECOGNITION ──
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let isListening = false;
+let silenceTimer = null;
+const SILENCE_DELAY = 1800; // ms sem fala → envia
+
+const micBtn  = document.getElementById('mic-btn');
+const volRing = document.getElementById('vol-ring');
+
+if (SpeechRec) {
+  recognition = new SpeechRec();
+  recognition.lang = 'pt-BR';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (e) => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      e.results[i].isFinal ? (final += t) : (interim += t);
+    }
+
+    // Escreve na caixa de texto
+    const current = msgInput.value.replace(/\[.*?\]$/, '').trimEnd();
+    if (final) {
+      msgInput.value = (current + ' ' + final).trim();
+    } else if (interim) {
+      msgInput.value = (current + ' [' + interim + ']').trimStart();
+    }
+
+    // Reinicia timer de silêncio
+    clearTimeout(silenceTimer);
+    silenceTimer = setTimeout(() => {
+      stopListening(true); // true = auto-send
+    }, SILENCE_DELAY);
+  };
+
+  recognition.onerror = (e) => {
+  // no-speech e aborted são normais — não interrompem
+  if (e.error === 'no-speech' || e.error === 'aborted') return;
+  console.warn('Mic error:', e.error);
+  stopListening(false);
+};
+  recognition.onend = () => {
+  if (!isListening) return;
+  setTimeout(() => {
+    if (!isListening) return; // checagem dupla
+    try { recognition.start(); }
+    catch(err) { console.warn('Restart falhou:', err); }
+  }, 200);
+};
+} else {
+  micBtn.title = 'Reconhecimento de voz não suportado neste navegador';
+  micBtn.style.opacity = '0.3';
+  micBtn.style.cursor  = 'not-allowed';
+}
+
+function startListening() {
+  window.speechSynthesis.cancel();
+  if (!recognition || isListening) return;
+  isListening = true;
+  micBtn.classList.add('listening');
+  recognition.start();
+  setTimeout(() => startVolumeCapture(), 600);
+}
+
+function stopListening(autoSend = false) {
+  if (!recognition || !isListening) return;
+  isListening = false;
+  clearTimeout(silenceTimer);
+  micBtn.classList.remove('listening');
+  stopVolumeCapture();
+setTimeout(() => recognition.stop(), 100);
+
+  if (autoSend) {
+    // Remove possível texto interim entre colchetes
+    msgInput.value = msgInput.value.replace(/\s*\[.*?\]$/, '').trim();
+    if (msgInput.value && STATE === 'idle') {
+      setTimeout(() => sendBtn.click(), 300);
+    }
+  }
+}
+
+micBtn.addEventListener('click', () => {
+  isListening ? stopListening(false) : startListening();
+});
+
+// ── VOLUME / AUDIO ANALYSER ──
+let audioCtx = null, analyser = null, micStream = null, volRAF = null;
+
+function startVolumeCapture() {
+  volRing.classList.add('active');
+
+  let phase = 0;
+  function tick() {
+    if (!isListening) return;
+    phase += 0.08;
+    // Simula pulsação suave enquanto escuta
+    audioVolume = 0.4 + Math.sin(phase) * 0.3;
+
+    const r = RADIUS * (1 + audioVolume * 0.18);
+    const alpha = 0.35 + audioVolume * 0.2;
+    volRing.style.width       = r * 2 + 'px';
+volRing.style.height      = r * 2 + 'px';
+volRing.style.boxShadow   = `0 0 ${20 + audioVolume * 30}px rgba(255,80,80,${alpha.toFixed(2)})`;
+volRing.style.borderColor = `rgba(255,80,80,${(alpha * 1.3).toFixed(2)})`;
+volRing.style.left        = CX + 'px';
+volRing.style.top         = CY + 'px';
+
+    volRAF = requestAnimationFrame(tick);
+  }
+  tick();
+}
+
+function stopVolumeCapture() {
+  cancelAnimationFrame(volRAF);
+  audioVolume = 0;
+  volRing.classList.remove('active');
+}
+/* ─── TTS com Google Cloud Neural ─── */
+const TTS_URL    = '/.netlify/functions/tts';
+
+async function speak(text) {
+  window.speechSynthesis?.cancel();
+
+  try {
+    const res = await fetch(
+      `'/api/tts',`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text },
+          voice: {
+            languageCode: 'pt-BR',
+            name: 'pt-BR-Neural2-C', // voz feminina neural — troque por pt-BR-Neural2-B para masculina
+          },
+          audioConfig: {
+            audioEncoding: 'MP3',
+            speakingRate: 1.05,
+            pitch: 0.0,
+          }
+        })
+      }
+    );
+
+    const data = await res.json();
+    if (!data.audioContent) return;
+
+    const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+    audio.play();
+  } catch (err) {
+    console.warn('TTS erro:', err);
+  }
+}
+/* ─── BOTÃO TTS ─── */
+ttsBtn.addEventListener('click', () => {
+  const text = replyText.textContent.trim();
+  if (!text) return;
+
+  const icon = ttsBtn.querySelector('.material-symbols-outlined');
+
+  if (ttsBtn._playing) {
+    if (ttsBtn._audio) { ttsBtn._audio.pause(); ttsBtn._audio.currentTime = 0; }
+    ttsBtn._playing = false;
+    icon.textContent = 'volume_up';
+    ttsBtn.style.color = 'rgba(255,255,255,0.35)';
+    return;
+  }
+
+  icon.textContent = 'stop_circle';
+  ttsBtn.style.color = '#5dd8c0';
+  ttsBtn._playing = true;
+
+  const onEnd = () => {
+    ttsBtn._playing = false;
+    icon.textContent = 'volume_up';
+    ttsBtn.style.color = 'rgba(255,255,255,0.35)';
+  };
+
+  // ← Chama seu proxy, sem chave nenhuma no frontend
+  (async () => {
+    try {
+      const res = await fetch('/.netlify/functions/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text },
+          voice: { languageCode: 'pt-BR', name: 'pt-BR-Neural2-C' },
+          audioConfig: { audioEncoding: 'MP3', speakingRate: 1.05, pitch: 0.0 }
+        })
+      });
+      const data = await res.json();
+      if (!data.audioContent) { onEnd(); return; }
+      const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+      ttsBtn._audio = audio;
+      audio.onended = onEnd;
+      audio.onerror = onEnd;
+      audio.play();
+    } catch { onEnd(); }
+  })();
+});
+/* ─── GERAÇÃO DE IMAGEM (Imagen 3 Nano) ─── */
+const imggenOverlay  = document.getElementById('imggen-overlay');
+const imggenPrompt   = document.getElementById('imggen-prompt');
+const imggenGenerate = document.getElementById('imggen-generate');
+const imggenCancel   = document.getElementById('imggen-cancel');
+const imggenStatus   = document.getElementById('imggen-status');
+const imggenResult   = document.getElementById('imggen-result');
+const imggenImg      = document.getElementById('imggen-img');
+const imggenDownload = document.getElementById('imggen-download');
+const imggenNew      = document.getElementById('imggen-new');
+
+function openImgGen() {
+  imggenOverlay.classList.remove('imggen-hidden');
+  imggenPrompt.value = '';
+  imggenStatus.textContent = '';
+  imggenResult.style.display = 'none';
+  imggenGenerate.disabled = false;
+  setTimeout(() => imggenPrompt.focus(), 100);
+}
+function closeImgGen() {
+  imggenOverlay.classList.add('imggen-hidden');
+}
+
+imggenCancel.addEventListener('click', closeImgGen);
+imggenOverlay.addEventListener('click', e => {
+  if (e.target === imggenOverlay) closeImgGen();
+});
+
+imggenNew.addEventListener('click', () => {
+  imggenResult.style.display = 'none';
+  imggenStatus.textContent = '';
+  imggenGenerate.disabled = false;
+  imggenPrompt.value = '';
+  imggenPrompt.focus();
+});
+
+imggenDownload.addEventListener('click', () => {
+  const src = imggenImg.src;
+  if (!src) return;
+  const a = document.createElement('a');
+  a.href = src;
+  a.download = `genesis-img-${Date.now()}.png`;
+  a.click();
+});
+
+imggenGenerate.addEventListener('click', async () => {
+  const prompt = imggenPrompt.value.trim();
+  if (!prompt) { imggenPrompt.focus(); return; }
+
+  imggenGenerate.disabled = true;
+  imggenResult.style.display = 'none';
+  imggenStatus.textContent = '⬡ gerando imagem...';
+
+  try {
+    const res = await fetch('/.netlify/functions/imagegen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `Erro ${res.status}`);
+
+    imggenImg.src = `data:${data.mimeType || 'image/png'};base64,${data.imageBase64}`;
+    imggenStatus.textContent = '';
+    imggenResult.style.display = 'flex';
+  } catch (err) {
+    imggenStatus.textContent = `⚠ ${err.message}`;
+    imggenGenerate.disabled = false;
+  }
+});
+</script>
+<!-- ── WAKE WORD SYSTEM ── -->
+<script>
+(function () {
+  /* ── CONFIG ── */
+  const WAKE_WORDS  = ['gênesis', 'genesis', 'geneses', 'ênis']; // variações fonéticas
+  const WAKE_LANG   = 'pt-BR';
+
+  /* ── ESTADO ── */
+  let wakeRec       = null;
+  let wakeActive    = false;
+  let wakeRestart   = null;
+  let wakeSuppressed = false; // true enquanto o mic principal está rodando
+
+  /* ── TOAST DE FEEDBACK ── */
+  const toast = document.createElement('div');
+  toast.id = 'wake-toast';
+  Object.assign(toast.style, {
+    position: 'fixed', bottom: '110px', left: '50%',
+    transform: 'translateX(-50%) translateY(12px)',
+    background: 'rgba(93,216,192,0.12)',
+    border: '1px solid rgba(93,216,192,0.35)',
+    backdropFilter: 'blur(14px)',
+    color: '#5dd8c0', fontFamily: "'Space Mono', monospace",
+    fontSize: '11px', letterSpacing: '0.18em', textTransform: 'uppercase',
+    padding: '9px 22px', borderRadius: '100px', zIndex: '9999',
+    pointerEvents: 'none', opacity: '0',
+    transition: 'opacity 0.3s, transform 0.3s',
+    whiteSpace: 'nowrap',
+  });
+  document.body.appendChild(toast);
+
+  let toastTimer;
+  function showToast(msg, durationMs = 2200) {
+    clearTimeout(toastTimer);
+    toast.textContent = msg;
+    toast.style.opacity  = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+    toastTimer = setTimeout(() => {
+      toast.style.opacity  = '0';
+      toast.style.transform = 'translateX(-50%) translateY(12px)';
+    }, durationMs);
+  }
+
+  /* ── INDICADOR ALWAYS-ON no topbar ── */
+  const wakeIndicator = document.createElement('div');
+  wakeIndicator.id = 'wake-indicator';
+  Object.assign(wakeIndicator.style, {
+    display: 'flex', alignItems: 'center', gap: '7px',
+    fontSize: '9px', fontFamily: "'Space Mono', monospace",
+    letterSpacing: '0.16em', textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.22)', cursor: 'default',
+  });
+  wakeIndicator.innerHTML = `
+    <div id="wake-dot" style="
+      width:6px;height:6px;border-radius:50%;
+      background:#5dd8c0;opacity:0.35;flex-shrink:0;
+      transition:opacity 0.3s,box-shadow 0.3s;
+    "></div>
+    <span id="wake-label">escuta passiva</span>
+  `;
+  // Insere no topbar, antes do state-tag
+  const stateTagEl = document.getElementById('state-tag');
+  stateTagEl.parentNode.insertBefore(wakeIndicator, stateTagEl);
+
+  const wakeDot   = document.getElementById('wake-dot');
+  const wakeLabel = document.getElementById('wake-label');
+
+  function setWakeDotState(state) {
+    // state: 'listening' | 'off' | 'detected'
+    if (state === 'listening') {
+      wakeDot.style.opacity   = '0.45';
+      wakeDot.style.boxShadow = '0 0 8px rgba(93,216,192,0.4)';
+      wakeLabel.textContent   = 'escuta passiva';
+    } else if (state === 'detected') {
+      wakeDot.style.opacity   = '1';
+      wakeDot.style.boxShadow = '0 0 14px rgba(93,216,192,0.9)';
+      wakeLabel.textContent   = 'wake word!';
+    } else {
+      wakeDot.style.opacity   = '0.15';
+      wakeDot.style.boxShadow = 'none';
+      wakeLabel.textContent   = 'escuta pausada';
+    }
+  }
+
+  /* ── SPEECH RECOGNITION para wake word ── */
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    wakeLabel.textContent = 'sem suporte';
+    console.warn('[Wake Word] SpeechRecognition não suportado.');
+    return;
+  }
+
+  function buildRec() {
+    const r = new SR();
+    r.lang             = WAKE_LANG;
+    r.continuous       = true;
+    r.interimResults   = true;
+    r.maxAlternatives  = 3;
+
+    r.onresult = (e) => {
+      if (wakeSuppressed) return;
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        // Checa todas as alternativas
+        for (let a = 0; a < e.results[i].length; a++) {
+          const t = e.results[i][a].transcript.toLowerCase().normalize('NFD')
+                    .replace(/[\u0300-\u036f]/g, ''); // remove acentos para comparar
+          if (WAKE_WORDS.some(w => {
+            const wn = w.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            return t.includes(wn);
+          })) {
+            onWakeWordDetected();
+            return;
+          }
+        }
+      }
+    };
+
+    r.onerror = (e) => {
+      if (['no-speech', 'aborted'].includes(e.error)) return;
+      scheduleRestart(1200);
+    };
+
+    r.onend = () => {
+      if (!wakeActive || wakeSuppressed) return;
+      scheduleRestart(400);
+    };
+
+    return r;
+  }
+
+  function scheduleRestart(delay) {
+    clearTimeout(wakeRestart);
+    wakeRestart = setTimeout(() => {
+      if (!wakeActive || wakeSuppressed) return;
+      try { wakeRec = buildRec(); wakeRec.start(); setWakeDotState('listening'); }
+      catch (err) { scheduleRestart(800); }
+    }, delay);
+  }
+
+  function startWake() {
+    if (wakeActive) return;
+    wakeActive = true;
+    try { wakeRec = buildRec(); wakeRec.start(); setWakeDotState('listening'); }
+    catch (err) { scheduleRestart(600); }
+  }
+
+  function pauseWake() {
+    wakeSuppressed = true;
+    clearTimeout(wakeRestart);
+    setWakeDotState('off');
+    try { wakeRec?.stop(); } catch (_) {}
+  }
+
+  function resumeWake() {
+    wakeSuppressed = false;
+    scheduleRestart(600);
+  }
+
+  /* ── DETECÇÃO ── */
+  function onWakeWordDetected() {
+    setWakeDotState('detected');
+    showToast('⬡  gênesis ativada', 1800);
+
+    // Pausa wake word (não pode ter 2 reconhecimentos ao mesmo tempo)
+    pauseWake();
+
+    // Aciona o microfone principal (função já existente no app)
+    setTimeout(() => {
+      if (typeof startListening === 'function' && !isListening && STATE === 'idle') {
+        startListening();
+      }
+    }, 300);
+  }
+
+  /* ── INTERCEPTA o stopListening original para reativar wake word depois ── */
+  const _origStop = window.stopListening;
+  window.stopListening = function (autoSend) {
+    if (typeof _origStop === 'function') _origStop(autoSend);
+    // Reativa escuta passiva após o mic principal terminar
+    setTimeout(() => {
+      resumeWake();
+      setWakeDotState('listening');
+    }, 1200);
+  };
+
+  /* ── PAGE VISIBILITY: reativa ao voltar para a aba ── */
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && wakeActive && !wakeSuppressed) {
+      scheduleRestart(500);
+    }
+  });
+
+  /* ── INICIA automaticamente ── */
+  // Aguarda interação do usuário (exigência do browser para microfone)
+  let started = false;
+  function tryStart() {
+    if (started) return;
+    started = true;
+    startWake();
+    document.removeEventListener('click', tryStart);
+    document.removeEventListener('keydown', tryStart);
+  }
+  document.addEventListener('click',   tryStart);
+  document.addEventListener('keydown', tryStart);
+
+})();
+</script>
+<!-- ══════════════════════════════════════════════════════════════════════
+     MÓDULO: Download de Vídeo
+     Cole este bloco inteiro logo antes do </body>, após todos os outros <script>
+     ══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+
+  /* ── 1. DETECÇÃO DE COMANDO ───────────────────────────────────────────── */
+  function detectVideoDownload(text) {
+    /* Aceita: "baixe URL", "baixar URL", "baixa URL" */
+    const m = text.trim().match(/^baix[ae]r?\s+(https?:\/\/\S+)/i);
+    return m ? m[1] : null;
+  }
+  window.detectVideoDownload = detectVideoDownload;
+
+
+  /* ── 2. RENDER: mostra título + botões de qualidade ──────────────────── */
+  window.renderVideoOptions = function (title, platform, qualities, videoUrl) {
+    const rc = document.getElementById('rich-content');
+    const rh = document.getElementById('reply-hint');
+    rc.innerHTML = '';
+    if (rh) rh.style.display = 'none';
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText =
+      'display:flex;flex-direction:column;gap:14px;' +
+      'animation:fadeUp .4s cubic-bezier(.16,1,.3,1) both';
+
+    /* Plataforma */
+    const plat = document.createElement('div');
+    plat.style.cssText =
+      'font-size:10px;text-transform:uppercase;letter-spacing:.22em;' +
+      'color:#5dd8c0;font-weight:700;display:flex;align-items:center;gap:6px';
+    plat.innerHTML =
+      '<span class="material-symbols-outlined" style="font-size:14px">download</span>' +
+      platform;
+
+    /* Título do vídeo */
+    const titleEl = document.createElement('div');
+    titleEl.style.cssText =
+      'font-size:14px;font-weight:600;color:rgba(230,245,255,.9);' +
+      'line-height:1.45;word-break:break-word';
+    titleEl.textContent = title;
+
+    /* Divisor */
+    const div = document.createElement('hr');
+    div.style.cssText =
+      'border:none;height:1px;margin:2px 0;' +
+      'background:linear-gradient(90deg,rgba(93,216,192,.2),transparent)';
+
+    /* Label qualidade */
+    const qlbl = document.createElement('div');
+    qlbl.style.cssText =
+      'font-size:10px;text-transform:uppercase;letter-spacing:.2em;' +
+      'color:rgba(255,255,255,.28)';
+    qlbl.textContent = 'Selecione a qualidade';
+
+    /* Grade de botões */
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;';
+
+    qualities.forEach(function (q) {
+      const btn = document.createElement('button');
+      btn.textContent = q;
+      btn.style.cssText = [
+        'padding:9px 16px', 'border-radius:10px',
+        'background:rgba(93,216,192,0.07)',
+        'border:1px solid rgba(93,216,192,0.22)',
+        'color:rgba(93,216,192,.85)',
+        'font-size:12px', "font-family:'Inter',sans-serif",
+        'cursor:pointer', 'transition:all .2s', 'font-weight:500',
+      ].join(';');
+      btn.onmouseover = function () {
+        btn.style.background   = 'rgba(93,216,192,0.18)';
+        btn.style.borderColor  = 'rgba(93,216,192,0.5)';
+        btn.style.color        = '#5dd8c0';
+      };
+      btn.onmouseout = function () {
+        btn.style.background   = 'rgba(93,216,192,0.07)';
+        btn.style.borderColor  = 'rgba(93,216,192,0.22)';
+        btn.style.color        = 'rgba(93,216,192,.85)';
+      };
+      btn.addEventListener('click', function () {
+        startVideoDownload(videoUrl, q, title, grid);
+      });
+      grid.appendChild(btn);
+    });
+
+    wrap.append(plat, titleEl, div, qlbl, grid);
+    rc.appendChild(wrap);
+  };
+
+
+  /* ── 3. DOWNLOAD: chama a função e exibe o botão final ───────────────── */
+  async function startVideoDownload(videoUrl, quality, title, grid) {
+    /* Desabilita todos os botões de qualidade */
+    grid.querySelectorAll('button').forEach(function (b) {
+      b.disabled     = true;
+      b.style.opacity = '.35';
+      b.style.cursor  = 'not-allowed';
+    });
+
+    /* Ativa estado "thinking" na esfera */
+    if (typeof setState === 'function') setState('thinking');
+    document.getElementById('send-btn').disabled = true;
+
+    const footerStatus = document.getElementById('footer-status');
+    const liveDot      = document.getElementById('live-dot');
+    if (footerStatus) footerStatus.textContent = 'preparando download…';
+    if (liveDot)      liveDot.classList.add('active');
+
+    try {
+      const res = await fetch('/.netlify/functions/video-download', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ url: videoUrl, quality }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || data.error)
+        throw new Error(data.error || 'Erro ao processar o download.');
+
+      if (!data.url)
+        throw new Error('Nenhuma URL de download recebida.');
+
+      renderDownloadReady(title, data.url, quality);
+      if (typeof setState === 'function') setState('idle');
+      document.getElementById('send-btn').disabled = false;
+
+    } catch (err) {
+      /* Mostra erro abaixo dos botões sem sumir com eles */
+      const rc = document.getElementById('rich-content');
+      const errEl = document.createElement('p');
+      errEl.style.cssText =
+        'color:rgba(255,120,120,.8);font-size:12.5px;margin-top:10px;' +
+        'animation:fadeUp .3s both';
+      errEl.textContent = '⚠ ' + err.message;
+      rc.appendChild(errEl);
+
+      /* Reabilita botões para o usuário tentar outra qualidade */
+      grid.querySelectorAll('button').forEach(function (b) {
+        b.disabled      = false;
+        b.style.opacity = '1';
+        b.style.cursor  = 'pointer';
+      });
+
+      if (typeof setState === 'function') setState('idle');
+      document.getElementById('send-btn').disabled = false;
+      if (liveDot) liveDot.classList.remove('active');
+    }
+  }
+
+
+  /* ── 4. RENDER: vídeo pronto — exibe botão de download ──────────────── */
+  function renderDownloadReady(title, dlUrl, quality) {
+    const rc = document.getElementById('rich-content');
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText =
+      'margin-top:16px;display:flex;flex-direction:column;gap:12px;' +
+      'animation:fadeUp .4s cubic-bezier(.16,1,.3,1) both';
+
+    /* Mensagem de confirmação */
+    const msg = document.createElement('div');
+    msg.style.cssText =
+      'display:flex;align-items:center;gap:8px;font-size:13px;' +
+      'color:rgba(93,216,192,.9);font-weight:500';
+    msg.innerHTML =
+      '<span class="material-symbols-outlined" style="font-size:18px">check_circle</span>' +
+      'Vídeo pronto para download!';
+
+    /* Subtítulo com nome do arquivo */
+    const sub = document.createElement('div');
+    sub.style.cssText =
+      'font-size:11px;color:rgba(255,255,255,.28);' +
+      "font-family:'Space Mono',monospace;letter-spacing:.06em;" +
+      'white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+    sub.textContent = title;
+
+    /* Botão de download principal — fetch + blob (sem abrir nova aba) */
+const dlBtn = document.createElement('button');
+dlBtn.innerHTML =
+  '<span class="material-symbols-outlined" ' +
+    'style="font-size:18px;vertical-align:middle">download</span>' +
+  ' Baixar · ' + quality;
+dlBtn.style.cssText = [
+  'display:flex', 'align-items:center', 'justify-content:center', 'gap:8px',
+  'padding:13px 20px', 'border-radius:12px',
+  'background:var(--accent)', 'color:#03050a',
+  'font-size:13px', 'font-weight:700',
+  "font-family:'Inter',sans-serif",
+  'border:none', 'cursor:pointer',
+  'transition:background .2s, opacity .2s', 'width:100%',
+].join(';');
+dlBtn.onmouseover = function () { if (!dlBtn.disabled) dlBtn.style.background = '#73ecd4'; };
+dlBtn.onmouseout  = function () { if (!dlBtn.disabled) dlBtn.style.background = 'var(--accent)'; };
+
+dlBtn.addEventListener('click', async function () {
+  /* Feedback visual */
+  dlBtn.disabled = true;
+  dlBtn.style.opacity = '0.6';
+  dlBtn.innerHTML =
+    '<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle;animation:spin 1s linear infinite">progress_activity</span>' +
+    ' Baixando...';
+
+  try {
+    const response = await fetch(dlUrl);
+    if (!response.ok) throw new Error('Falha ao buscar o vídeo.');
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href     = blobUrl;
+    a.download = (title || 'tiktok').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') + '.mp4';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+
+    dlBtn.innerHTML =
+      '<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle">check_circle</span>' +
+      ' Download concluído!';
+    dlBtn.style.opacity = '1';
+
+  } catch (err) {
+    /* Fallback: abre em nova aba se o CORS bloquear */
+    window.open(dlUrl, '_blank', 'noopener');
+    dlBtn.disabled = false;
+    dlBtn.style.opacity = '1';
+    dlBtn.innerHTML =
+      '<span class="material-symbols-outlined" style="font-size:18px;vertical-align:middle">download</span>' +
+      ' Baixar · ' + quality;
+  }
+});
+
+    wrap.append(msg, sub, dlBtn);
+    rc.appendChild(wrap);
+    document.getElementById('reply-area').scrollTop = 99999;
+
+    const footerStatus = document.getElementById('footer-status');
+    const liveDot      = document.getElementById('live-dot');
+    if (footerStatus) footerStatus.textContent = 'download pronto';
+    if (liveDot)      liveDot.classList.remove('active');
+  }
+
+
+  /* ── 5. INTERCEPTA O BOTÃO DE ENVIO (fase de captura, antes do handler original) ── */
+  document.getElementById('send-btn').addEventListener('click', async function (e) {
+    const inputEl  = document.getElementById('msg-input');
+    const txt      = inputEl.value.trim();
+    const videoUrl = detectVideoDownload(txt);
+
+    if (!videoUrl) return;                  /* não é pedido de vídeo — deixa passar */
+    if (typeof STATE !== 'undefined' && STATE !== 'idle') return;
+
+    e.stopImmediatePropagation();           /* bloqueia o handler original do Gemini */
+
+    inputEl.value = '';
+    if (typeof setState  === 'function') setState('thinking');
+    document.getElementById('send-btn').disabled = true;
+
+    const rc = document.getElementById('rich-content');
+    const rh = document.getElementById('reply-hint');
+    if (rc) rc.innerHTML = '';
+    if (rh) { rh.style.display = 'block'; rh.textContent = 'Obtendo informações do vídeo…'; }
+
+    if (typeof openPanel === 'function') openPanel();
+
+    try {
+      const res = await fetch('/.netlify/functions/video-info', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ url: videoUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || `Erro ${res.status}`);
+
+      if (typeof setState === 'function') setState('responding');
+      if (rh) rh.style.display = 'none';
+
+      window.renderVideoOptions(data.title, data.platform, data.qualities, videoUrl);
+
+      if (typeof setState === 'function') setState('idle');
+      document.getElementById('send-btn').disabled = false;
+
+      if (typeof saveToHistory === 'function')
+        saveToHistory(txt, '[download de vídeo: ' + data.title + ']');
+
+    } catch (err) {
+      if (rh) { rh.style.display = 'block'; rh.textContent = '⚠ ' + err.message; }
+      if (typeof setState === 'function') setState('idle');
+      document.getElementById('send-btn').disabled = false;
+    }
+
+  }, true /* capture = true → roda ANTES do listener original */);
+
+})();
+</script>
+</body>
+</html>
