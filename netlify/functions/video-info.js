@@ -1,36 +1,100 @@
-/* ── video-info.js — versão simples (o frontend já acordou o servidor) ── */
+/* ── video-info.js (v4 — RapidAPI yt-api, sem dependências npm) ─────────────
+   Recebe { url } → retorna { title, platform, qualities }
+   Usa apenas fetch nativo do Node 18+ (zero dependências)
+   ──────────────────────────────────────────────────────────────────────── */
 
 exports.handler = async (event) => {
   const headers = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
   };
+
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers };
 
   try {
     const { url } = JSON.parse(event.body || '{}');
     if (!url) throw new Error('URL não informada.');
 
-    const SERVER = process.env.VIDEO_SERVER_URL;
-    if (!SERVER) throw new Error('VIDEO_SERVER_URL não configurada no Netlify.');
+    const rapidKey = process.env.RAPIDAPI_KEY;
 
-    const res  = await fetch(`${SERVER}/info?url=${encodeURIComponent(url)}`, {
-      signal: AbortSignal.timeout(9000), // abaixo do limite do Netlify
-    });
+    let title    = 'Vídeo';
+    let platform = 'Web';
+    let qualities = [];
 
-    const text = await res.text();
+    /* ── YouTube ── */
+    if (/youtube\.com|youtu\.be/.test(url)) {
+      platform = 'YouTube';
 
-    /* Servidor ainda acordando — retorna erro amigável */
-    if (text.trim().startsWith('<')) {
-      throw new Error('Servidor iniciando, aguarde alguns segundos e tente novamente.');
+      if (!rapidKey) throw new Error('RAPIDAPI_KEY não configurada nas variáveis de ambiente do Netlify.');
+
+      const videoId = url.match(/(?:v=|youtu\.be\/)([^&?/]+)/)?.[1];
+      if (!videoId) throw new Error('ID do vídeo não encontrado na URL.');
+
+      const res = await fetch(
+        `https://yt-api.p.rapidapi.com/dl?id=${videoId}`,
+        {
+          headers: {
+            'X-RapidAPI-Key':  rapidKey,
+            'X-RapidAPI-Host': 'yt-api.p.rapidapi.com',
+          },
+          signal: AbortSignal.timeout(15000),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || data.status === 'FAILED') throw new Error(data.message || 'Erro ao buscar vídeo.');
+
+      title = data.title || 'Vídeo do YouTube';
+
+      // Qualidades disponíveis
+      const qs = (data.formats || [])
+        .filter(f => f.qualityLabel && f.hasVideo && f.hasAudio)
+        .map(f => f.qualityLabel)
+        .filter((v, i, a) => a.indexOf(v) === i)
+        .sort((a, b) => parseInt(b) - parseInt(a));
+
+      qualities = qs.length > 0
+        ? [...qs, 'Apenas áudio (MP3)']
+        : ['1080p', '720p', '480p', '360p', 'Apenas áudio (MP3)'];
+
+    /* ── TikTok ── */
+    } else if (/tiktok\.com/.test(url)) {
+      platform = 'TikTok';
+      title    = 'Vídeo do TikTok';
+      qualities = ['Sem marca d\'água', 'Com marca d\'água', 'Apenas áudio (MP3)'];
+
+    /* ── Instagram ── */
+    } else if (/instagram\.com/.test(url)) {
+      platform = 'Instagram';
+      title    = 'Vídeo do Instagram';
+      qualities = ['Melhor qualidade'];
+
+    /* ── Twitter/X ── */
+    } else if (/twitter\.com|x\.com/.test(url)) {
+      platform = 'X / Twitter';
+      title    = 'Vídeo do X';
+      qualities = ['Melhor qualidade'];
+
+    /* ── Facebook ── */
+    } else if (/facebook\.com|fb\.watch/.test(url)) {
+      platform = 'Facebook';
+      title    = 'Vídeo do Facebook';
+      qualities = ['Melhor qualidade'];
+
+    } else {
+      throw new Error('Plataforma não suportada. Use YouTube, TikTok, Instagram, Twitter ou Facebook.');
     }
 
-    const data = JSON.parse(text);
-    if (!res.ok) throw new Error(data.error || `Erro ${res.status}`);
-
-    return { statusCode: 200, headers, body: JSON.stringify(data) };
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ title, platform, qualities }),
+    };
 
   } catch (err) {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: err.message }) };
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ error: err.message }),
+    };
   }
 };
