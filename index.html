@@ -990,62 +990,12 @@ body, html { overscroll-behavior: none; }
   #artifact-panel.open { transform: translateY(0); }
   .artifact-panel-glass { border-radius: 22px 22px 0 0; }
 }
-/* ═══════════════════════════════════
-   RESIZE HANDLE do Artifact Panel
-   ═══════════════════════════════════ */
-#artifact-resize-handle {
-  position: absolute;
-  left: -5px;
-  top: 0; bottom: 0;
-  width: 10px;
-  cursor: col-resize;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-#artifact-resize-handle::before {
-  content: '';
-  width: 3px;
-  height: 48px;
-  border-radius: 3px;
-  background: rgba(255,255,255,0.12);
-  transition: background 0.2s, height 0.2s, box-shadow 0.2s;
-}
-
-#artifact-resize-handle:hover::before,
-#artifact-resize-handle.dragging::before {
-  background: #3b82f6;
-  height: 64px;
-  box-shadow: 0 0 12px rgba(59,130,246,0.5);
-}
-
-/* Garante que o painel seja position:relative para o handle se posicionar */
-#artifact-panel .artifact-panel-glass {
-  position: relative;
-}
-
-/* Impede seleção de texto durante o drag */
-body.artifact-resizing * {
-  user-select: none !important;
-  -webkit-user-select: none !important;
-}
-body.artifact-resizing { cursor: col-resize !important; }
-
-/* Mobile: esconde o handle (não faz sentido em touch) */
-@media (max-width: 768px) {
-  #artifact-resize-handle { display: none; }
-}
 </style>
 </head>
 <body>
 <!-- ═══ ARTIFACT PANEL ═══ -->
 <div id="artifact-panel">
   <div class="artifact-panel-glass">
-    <div id="artifact-resize-handle" title="Arrastar para redimensionar"></div>
 
     <div class="artifact-header">
       <div class="artifact-tabs">
@@ -3143,86 +3093,6 @@ dlBtn.addEventListener('click', async function () {
       _origRender(md, onDone);
     }
   };
-
-})();
-</script>
-<script>
-/* ═══════════════════════════════════════════
-   MÓDULO: Artifact Panel — Resize Handle
-   ═══════════════════════════════════════════ */
-(function () {
-  const handle  = document.getElementById('artifact-resize-handle');
-  const panel   = document.getElementById('artifact-panel');
-  if (!handle || !panel) return;
-
-  const MIN_W = 320;   // largura mínima em px
-  const MAX_W = 900;   // largura máxima em px
-
-  let dragging  = false;
-  let startX    = 0;
-  let startW    = 0;
-
-  /* Lê a largura atual do painel */
-  function getPanelWidth() {
-    return panel.getBoundingClientRect().width;
-  }
-
-  /* Aplica a nova largura — sobrepõe tudo, não desloca a página */
-  function applyWidth(w) {
-    const clamped = Math.min(MAX_W, Math.max(MIN_W, w));
-    panel.style.width = clamped + 'px';
-    /* Atualiza a variável CSS para que outros elementos que a usam se ajustem */
-    document.documentElement.style.setProperty('--panel-w', clamped + 'px');
-  }
-
-  /* ── MOUSE ── */
-  handle.addEventListener('mousedown', function (e) {
-    e.preventDefault();
-    dragging = true;
-    startX   = e.clientX;
-    startW   = getPanelWidth();
-    handle.classList.add('dragging');
-    document.body.classList.add('artifact-resizing');
-  });
-
-  document.addEventListener('mousemove', function (e) {
-    if (!dragging) return;
-    /* Arrastar para a esquerda = aumentar; para direita = diminuir */
-    const delta = startX - e.clientX;
-    applyWidth(startW + delta);
-  });
-
-  document.addEventListener('mouseup', function () {
-    if (!dragging) return;
-    dragging = false;
-    handle.classList.remove('dragging');
-    document.body.classList.remove('artifact-resizing');
-  });
-
-  /* ── TOUCH (tablet) ── */
-  handle.addEventListener('touchstart', function (e) {
-    dragging = true;
-    startX   = e.touches[0].clientX;
-    startW   = getPanelWidth();
-    handle.classList.add('dragging');
-  }, { passive: true });
-
-  document.addEventListener('touchmove', function (e) {
-    if (!dragging) return;
-    const delta = startX - e.touches[0].clientX;
-    applyWidth(startW + delta);
-  }, { passive: true });
-
-  document.addEventListener('touchend', function () {
-    if (!dragging) return;
-    dragging = false;
-    handle.classList.remove('dragging');
-  });
-
-  /* ── DOUBLE CLICK: volta ao tamanho padrão (400px) ── */
-  handle.addEventListener('dblclick', function () {
-    applyWidth(400);
-  });
 
 })();
 </script>
