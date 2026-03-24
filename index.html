@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
+<!-- Syntax Highlighting -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
 <title>Genesis | Neural Interface</title>
@@ -820,9 +823,219 @@ body, html { overscroll-behavior: none; }
 /* A classe .keyboard-open é adicionada via JS quando o teclado abre */
 .keyboard-open #sphere-zone { opacity: 0.25; transition: opacity 0.3s; }
 .keyboard-open #topbar { opacity: 0; pointer-events: none; }
+/* ═══════════════════════════════════════════
+   ARTIFACT CARD (exibido na gaveta de resposta)
+   ═══════════════════════════════════════════ */
+.artifact-card {
+  background: rgba(93,216,192,0.05);
+  border: 1px solid rgba(93,216,192,0.28);
+  border-radius: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16,1,0.3,1);
+  animation: fadeUp 0.4s cubic-bezier(0.16,1,0.3,1) both;
+  margin-top: 12px;
+}
+.artifact-card:hover {
+  background: rgba(93,216,192,0.11);
+  border-color: rgba(93,216,192,0.55);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(93,216,192,0.08);
+}
+.artifact-card-header {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+}
+.artifact-card-icon {
+  width: 36px; height: 36px; border-radius: 9px;
+  background: rgba(93,216,192,0.1);
+  border: 1px solid rgba(93,216,192,0.22);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.artifact-card-icon .material-symbols-outlined { font-size: 18px; color: #5dd8c0; }
+.artifact-card-title {
+  font-size: 13.5px; font-weight: 600; color: rgba(230,245,255,0.92);
+  margin-bottom: 2px;
+}
+.artifact-card-sub {
+  font-size: 10px; font-family: 'Space Mono', monospace;
+  letter-spacing: 0.1em; color: rgba(93,216,192,0.55); text-transform: uppercase;
+}
+.artifact-card-footer {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11px; color: rgba(255,255,255,0.3);
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.artifact-card-footer .material-symbols-outlined { font-size: 14px; color: rgba(93,216,192,0.45); }
+
+/* ═══════════════════════════════════════════
+   ARTIFACT PANEL (gaveta de código)
+   ═══════════════════════════════════════════ */
+#artifact-panel {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: var(--panel-w);
+  z-index: 130;
+  display: flex; flex-direction: column;
+  padding: calc(20px + 64px + 20px) var(--panel-gap) 0 var(--panel-gap);
+  pointer-events: none; opacity: 0; transform: translateX(40px);
+  transition: opacity 0.55s cubic-bezier(0.16,1,0.3,1),
+              transform 0.65s cubic-bezier(0.16,1,0.3,1);
+}
+#artifact-panel.open {
+  opacity: 1; transform: translateX(0); pointer-events: auto;
+}
+
+.artifact-panel-glass {
+  display: flex; flex-direction: column; height: 100%; overflow: hidden;
+  background: rgba(8,12,22,0.82);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px 16px 0 0;
+  box-shadow: -8px 0 40px rgba(0,0,0,0.35);
+}
+
+.artifact-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  flex-shrink: 0;
+}
+
+.artifact-tabs { display: flex; gap: 4px; }
+.art-tab {
+  padding: 6px 16px; border-radius: 8px; font-size: 11px;
+  font-family: 'Inter', sans-serif; font-weight: 500;
+  letter-spacing: 0.05em; cursor: pointer;
+  border: 1px solid transparent;
+  color: rgba(255,255,255,0.3); background: transparent;
+  transition: all 0.2s;
+}
+.art-tab:hover { color: rgba(255,255,255,0.65); }
+.art-tab.active {
+  background: rgba(93,216,192,0.1);
+  border-color: rgba(93,216,192,0.28); color: #5dd8c0;
+}
+
+.artifact-actions { display: flex; align-items: center; gap: 6px; }
+
+#artifact-close {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.35);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s;
+}
+#artifact-close:hover { background: rgba(255,255,255,0.1); color: #fff; }
+#artifact-close .material-symbols-outlined { font-size: 16px; }
+
+/* Code View */
+#artifact-code-view {
+  flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+}
+.artifact-code-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  background: rgba(0,0,0,0.2);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-shrink: 0;
+}
+.artifact-lang-badge {
+  font-size: 10px; font-family: 'Space Mono', monospace;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: rgba(93,216,192,0.6);
+  background: rgba(93,216,192,0.07);
+  border: 1px solid rgba(93,216,192,0.15);
+  padding: 3px 10px; border-radius: 5px;
+}
+#artifact-copy-btn {
+  font-size: 11px; font-family: 'Inter', sans-serif;
+  padding: 5px 12px; border-radius: 7px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.45); cursor: pointer;
+  display: flex; align-items: center; gap: 5px; transition: all 0.2s;
+}
+#artifact-copy-btn:hover { background: rgba(93,216,192,0.1); border-color: rgba(93,216,192,0.25); color: #5dd8c0; }
+#artifact-copy-btn .material-symbols-outlined { font-size: 13px; }
+
+#artifact-pre {
+  flex: 1; overflow: auto; margin: 0; padding: 0;
+  scrollbar-width: thin; scrollbar-color: rgba(93,216,192,0.15) transparent;
+  background: rgba(4,6,14,0.6);
+}
+#artifact-pre::-webkit-scrollbar { width: 4px; height: 4px; }
+#artifact-pre::-webkit-scrollbar-thumb { background: rgba(93,216,192,0.15); border-radius: 4px; }
+#artifact-pre code.hljs {
+  font-family: 'Space Mono', monospace !important;
+  font-size: 11.5px !important; line-height: 1.75 !important;
+  padding: 18px 16px !important; background: transparent !important;
+}
+
+/* Preview View */
+#artifact-preview-view {
+  flex: 1; display: none; min-height: 0; overflow: hidden;
+  background: #fff;
+}
+#artifact-iframe { width: 100%; height: 100%; border: none; }
+
+/* Mobile: vira bottom sheet sobre o neural-panel */
+@media (max-width: 768px) {
+  #artifact-panel {
+    top: unset; bottom: 0; left: 0; right: 0;
+    width: 100%; height: 82vh; padding: 0;
+    transform: translateY(100%); z-index: 160;
+  }
+  #artifact-panel.open { transform: translateY(0); }
+  .artifact-panel-glass { border-radius: 22px 22px 0 0; }
+}
 </style>
 </head>
 <body>
+<!-- ═══ ARTIFACT PANEL ═══ -->
+<div id="artifact-panel">
+  <div class="artifact-panel-glass">
+
+    <div class="artifact-header">
+      <div class="artifact-tabs">
+        <button id="tab-code" class="art-tab active">
+          <span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle;margin-right:4px">code</span>
+          Código
+        </button>
+        <button id="tab-preview" class="art-tab">
+          <span class="material-symbols-outlined" style="font-size:13px;vertical-align:middle;margin-right:4px">desktop_windows</span>
+          Preview
+        </button>
+      </div>
+      <div class="artifact-actions">
+        <button id="artifact-copy-btn">
+          <span class="material-symbols-outlined">content_copy</span>
+          Copiar
+        </button>
+        <button id="artifact-close" title="Fechar visualizador">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+    </div>
+
+    <div id="artifact-code-view">
+      <div class="artifact-code-bar">
+        <span class="artifact-lang-badge" id="artifact-lang-badge">code</span>
+        <span style="font-size:10px;font-family:'Space Mono',monospace;color:rgba(255,255,255,0.2);letter-spacing:.1em" id="artifact-lines-label"></span>
+      </div>
+      <pre id="artifact-pre"><code id="artifact-code-el"></code></pre>
+    </div>
+
+    <div id="artifact-preview-view">
+      <iframe id="artifact-iframe"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
+        title="Preview do código">
+      </iframe>
+    </div>
+
+  </div>
+</div>
 <div id="root">
 
   <!-- TOPBAR -->
@@ -2604,6 +2817,283 @@ dlBtn.addEventListener('click', async function () {
       inp.style.height = '';
     }, 100);
   });
+})();
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   MÓDULO: Artifact System — Genesis AI
+   Adicione este bloco como o último <script> antes de </body>
+   ═══════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  /* ── Estado atual do artefato aberto ── */
+  let currentArtifact = null;
+
+  /* ─────────────────────────────────────
+     1. DETECÇÃO DE BLOCOS DE CÓDIGO
+     ───────────────────────────────────── */
+  function detectCodeBlocks(md) {
+    const regex = /```(\w*)\n?([\s\S]*?)```/g;
+    const blocks = [];
+    let match;
+    while ((match = regex.exec(md)) !== null) {
+      const lang = match[1].trim() || 'code';
+      const code = match[2].trim();
+      if (code.length > 0) blocks.push({ lang, code });
+    }
+    if (!blocks.length) return null;
+    /* Extrai o texto explicativo fora dos blocos de código */
+    const explanation = md.replace(/```[\s\S]*?```/g, '').trim();
+    return { blocks, explanation };
+  }
+
+  /* ─────────────────────────────────────
+     2. RÓTULOS LEGÍVEIS POR LINGUAGEM
+     ───────────────────────────────────── */
+  const LANG_LABELS = {
+    html:'HTML', css:'CSS', js:'JavaScript', javascript:'JavaScript',
+    ts:'TypeScript', typescript:'TypeScript', jsx:'React JSX', tsx:'React TSX',
+    py:'Python', python:'Python', java:'Java', cpp:'C++', c:'C', cs:'C#',
+    php:'PHP', rb:'Ruby', go:'Go', rs:'Rust', swift:'Swift', kt:'Kotlin',
+    sql:'SQL', bash:'Bash', sh:'Shell', json:'JSON', xml:'XML', yaml:'YAML',
+    md:'Markdown', vue:'Vue', svelte:'Svelte',
+  };
+
+  /* ─────────────────────────────────────
+     3. RENDER: CARD DE ARTEFATO na gaveta
+     ───────────────────────────────────── */
+  function renderArtifactReply(detected, onDone) {
+    const rc    = document.getElementById('rich-content');
+    const rh    = document.getElementById('reply-hint');
+    const dot   = document.getElementById('live-dot');
+    const fstat = document.getElementById('footer-status');
+
+    rc.innerHTML = '';
+    if (rh) rh.style.display = 'none';
+
+    /* Renderiza explicação (sem os blocos de código) */
+    if (detected.explanation && detected.explanation.trim()) {
+      const expDiv = document.createElement('div');
+      /* Usa parseRichText do escopo global se disponível */
+      if (typeof parseRichText === 'function') {
+        expDiv.innerHTML = parseRichText(detected.explanation);
+      } else {
+        expDiv.innerHTML = `<p class="rt-p rt-animate">${detected.explanation.replace(/\n/g,'<br>')}</p>`;
+      }
+      rc.appendChild(expDiv);
+    }
+
+    /* Cria o card clicável */
+    const primary   = detected.blocks[0];
+    const langLabel = LANG_LABELS[primary.lang.toLowerCase()] || primary.lang.toUpperCase();
+    const lineCount = primary.code.split('\n').length;
+    const isHtml    = ['html','htm'].includes(primary.lang.toLowerCase());
+    const isJs      = ['js','javascript','jsx'].includes(primary.lang.toLowerCase());
+    const hasPreview = isHtml || isJs;
+
+    const card = document.createElement('div');
+    card.className = 'artifact-card';
+    card.innerHTML = `
+      <div class="artifact-card-header">
+        <div class="artifact-card-icon">
+          <span class="material-symbols-outlined">code_blocks</span>
+        </div>
+        <div>
+          <div class="artifact-card-title">${langLabel}</div>
+          <div class="artifact-card-sub">${lineCount} linha${lineCount !== 1 ? 's' : ''} · ${hasPreview ? 'com preview' : 'código'}</div>
+        </div>
+      </div>
+      <div class="artifact-card-footer">
+        <span class="material-symbols-outlined">open_in_new</span>
+        Clique para abrir no visualizador de código
+      </div>
+    `;
+    card.addEventListener('click', () => openArtifactPanel(detected));
+    rc.appendChild(card);
+
+    document.getElementById('reply-area').scrollTop = 99999;
+    if (dot) dot.classList.remove('active');
+    if (fstat) fstat.textContent = 'artefato pronto';
+    if (onDone) setTimeout(onDone, 300);
+  }
+
+  /* ─────────────────────────────────────
+     4. ABRIR O PAINEL DE ARTEFATO
+     ───────────────────────────────────── */
+  function openArtifactPanel(artifact) {
+    currentArtifact = artifact;
+    const primary   = artifact.blocks[0];
+    const langLabel = LANG_LABELS[primary.lang.toLowerCase()] || primary.lang.toUpperCase();
+
+    /* Preenche o código */
+    const codeEl = document.getElementById('artifact-code-el');
+    codeEl.textContent = primary.code;
+    codeEl.className   = `language-${primary.lang}`;
+
+    /* Syntax highlight */
+    if (window.hljs) {
+      try { hljs.highlightElement(codeEl); } catch(_) {}
+    }
+
+    /* Badge de linguagem + contagem de linhas */
+    document.getElementById('artifact-lang-badge').textContent = langLabel;
+    const lines = primary.code.split('\n').length;
+    document.getElementById('artifact-lines-label').textContent = `${lines} linhas`;
+
+    /* Monta o preview no iframe */
+    buildIframePreview(primary);
+
+    /* Garante que começa na aba Código */
+    switchTab('code');
+
+    /* Exibe o painel */
+    document.getElementById('artifact-panel').classList.add('open');
+  }
+
+  /* ─────────────────────────────────────
+     5. MONTAR CONTEÚDO DO IFRAME
+     ───────────────────────────────────── */
+  function escapeHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function buildIframePreview(primary) {
+    const iframe = document.getElementById('artifact-iframe');
+    const lang   = primary.lang.toLowerCase();
+    let   srcdoc;
+
+    if (['html','htm'].includes(lang)) {
+      srcdoc = primary.code;
+    } else if (['js','javascript','jsx'].includes(lang)) {
+      srcdoc = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { background:#0d1321; color:#c8d8e8; font-family:monospace;
+           padding:20px; margin:0; line-height:1.6; }
+    #__output { background:rgba(93,216,192,0.06); border:1px solid rgba(93,216,192,0.2);
+                border-radius:8px; padding:14px; margin-top:14px;
+                font-size:12px; white-space:pre-wrap; min-height:40px; }
+    #__label  { font-size:10px; letter-spacing:.15em; text-transform:uppercase;
+                color:rgba(93,216,192,0.5); margin-bottom:6px; }
+  </style>
+</head>
+<body>
+  <div id="__label">saída do console</div>
+  <div id="__output"></div>
+  <script>
+    (function(){
+      const out = document.getElementById('__output');
+      const orig = console.log.bind(console);
+      console.log = function(...a){
+        orig(...a);
+        out.textContent += a.map(x=>typeof x==='object'?JSON.stringify(x,null,2):String(x)).join(' ')+'\\n';
+      };
+      try { ${primary.code} }
+      catch(e){ out.textContent += '\\n⚠ '+e.message; out.style.color='rgba(255,120,120,.8)'; }
+    })();
+  <\/script>
+</body>
+</html>`;
+    } else {
+      /* Para outras linguagens: exibe o código formatado */
+      srcdoc = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"><\/script>
+  <style>
+    body { margin:0; background:#0d1117; }
+    pre  { margin:0; padding:20px; min-height:100vh; }
+    code { font-size:12px !important; line-height:1.7 !important; }
+  </style>
+</head>
+<body>
+  <pre><code class="language-${primary.lang}">${escapeHtml(primary.code)}</code></pre>
+  <script>hljs.highlightAll();<\/script>
+</body>
+</html>`;
+    }
+
+    iframe.srcdoc = srcdoc;
+  }
+
+  /* ─────────────────────────────────────
+     6. TROCAR ABAS
+     ───────────────────────────────────── */
+  function switchTab(tab) {
+    const codeView    = document.getElementById('artifact-code-view');
+    const previewView = document.getElementById('artifact-preview-view');
+    const tabCode     = document.getElementById('tab-code');
+    const tabPreview  = document.getElementById('tab-preview');
+
+    if (tab === 'code') {
+      codeView.style.display    = 'flex';
+      previewView.style.display = 'none';
+      tabCode.classList.add('active');
+      tabPreview.classList.remove('active');
+    } else {
+      codeView.style.display    = 'none';
+      previewView.style.display = 'block';
+      tabCode.classList.remove('active');
+      tabPreview.classList.add('active');
+    }
+  }
+
+  /* ─────────────────────────────────────
+     7. FECHAR PAINEL
+     ───────────────────────────────────── */
+  function closeArtifactPanel() {
+    document.getElementById('artifact-panel').classList.remove('open');
+    /* Limpa o iframe para parar JS em execução */
+    document.getElementById('artifact-iframe').srcdoc = '';
+    currentArtifact = null;
+  }
+
+  /* ─────────────────────────────────────
+     8. EVENTOS DOS BOTÕES
+     ───────────────────────────────────── */
+  document.getElementById('artifact-close').addEventListener('click', closeArtifactPanel);
+  document.getElementById('tab-code').addEventListener('click', () => switchTab('code'));
+  document.getElementById('tab-preview').addEventListener('click', () => switchTab('preview'));
+
+  document.getElementById('artifact-copy-btn').addEventListener('click', () => {
+    if (!currentArtifact) return;
+    const code = currentArtifact.blocks[0].code;
+    navigator.clipboard.writeText(code).then(() => {
+      const btn  = document.getElementById('artifact-copy-btn');
+      const orig = btn.innerHTML;
+      btn.innerHTML = '<span class="material-symbols-outlined">check</span> Copiado!';
+      btn.style.color = '#5dd8c0';
+      setTimeout(() => { btn.innerHTML = orig; btn.style.color = ''; }, 2000);
+    }).catch(() => {
+      /* Fallback para navegadores sem clipboard API */
+      const ta = document.createElement('textarea');
+      ta.value = currentArtifact.blocks[0].code;
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+    });
+  });
+
+  /* ─────────────────────────────────────
+     9. INTERCEPTA renderRichReply
+     Sobrescreve a função global para
+     checar se há código antes de renderizar
+     ───────────────────────────────────── */
+  const _origRender = window.renderRichReply;
+
+  window.renderRichReply = function (md, onDone) {
+    const detected = detectCodeBlocks(md);
+    if (detected) {
+      renderArtifactReply(detected, onDone);
+    } else {
+      _origRender(md, onDone);
+    }
+  };
+
 })();
 </script>
 </body>
