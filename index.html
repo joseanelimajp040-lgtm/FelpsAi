@@ -1097,15 +1097,15 @@ body, html { overscroll-behavior: none; }
   <!-- INPUT BAR -->
   <div id="bottom-controls">
     <div class="input-wrapper">
-      <input type="file" id="img-input" accept="image/*" style="display:none">
-<button id="img-btn" title="Enviar imagem" style="
+      <input type="file" id="file-input" accept="*/*" style="display:none">
+<button id="attach-btn" title="Anexar arquivo (imagem, áudio, PDF, documento...)" style="
   width:38px; height:38px; border-radius:50%; background:transparent;
   border:1px solid rgba(255,255,255,0.12); color:rgba(255,255,255,0.45);
   display:flex; align-items:center; justify-content:center;
   cursor:pointer; margin-right:8px; flex-shrink:0; transition:all 0.2s;
 " onmouseover="this.style.borderColor='rgba(93,216,192,0.5)';this.style.color='#5dd8c0'"
    onmouseout="this.style.borderColor='rgba(255,255,255,0.12)';this.style.color='rgba(255,255,255,0.45)'">
-  <span class="material-symbols-outlined" style="font-size:18px">image</span>
+  <span class="material-symbols-outlined" style="font-size:18px">attach_file</span>
 </button>
 <button id="mic-btn" title="Falar com o agente">
   <span class="material-symbols-outlined" style="font-size:18px">mic</span>
@@ -1621,31 +1621,145 @@ async function askGemini(userText, imageBase64 = null, imageMime = null) {
   return replyMsg;
 }
 
-let pendingImage = null; // { base64, mime, name }
+/* ─── ANEXO UNIVERSAL (imagem, áudio, PDF, texto, etc.) ─── */
+let pendingImage = null; // { base64, mime, name } — mantém compatibilidade com o resto do código
 
-const imgInput = document.getElementById('img-input');
-const imgBtn   = document.getElementById('img-btn');
+const fileInput  = document.getElementById('file-input');
+const attachBtn  = document.getElementById('attach-btn');
 
-imgBtn.addEventListener('click', () => imgInput.click());
+// Mantém referências para o reset visual do FileGen module
+const imgInput = fileInput;   // alias para não quebrar o módulo de FileGen
+const imgBtn   = attachBtn;   // alias para não quebrar o módulo de FileGen
 
-imgInput.addEventListener('change', () => {
-  const file = imgInput.files[0];
+attachBtn.addEventListener('click', () => fileInput.click());
+
+/* Tipos suportados */
+const IMAGE_TYPES = ['image/jpeg','image/png','image/webp','image/gif','image/bmp'];
+const AUDIO_TYPES = ['audio/mp3','audio/mpeg','audio/mp4','audio/wav','audio/ogg','audio/aac','audio/webm','audio/flac'];
+const TEXT_TYPES  = ['text/plain','text/csv','text/html','text/xml','application/json'];
+const PDF_TYPE    = 'application/pdf';
+
+fileInput.addEventListener('change', async () => {
+  const file = fileInput.files[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = e => {
-    const dataUrl = e.target.result;
-    const base64  = dataUrl.split(',')[1];
-    pendingImage  = { base64, mime: file.type, name: file.name };
+  const mime = file.type || 'application/octet-stream';
+  const name = file.name;
 
-    // Feedback visual no botão
-    imgBtn.style.borderColor = 'rgba(93,216,192,0.7)';
-    imgBtn.style.color       = '#5dd8c0';
-    imgBtn.style.background  = 'rgba(93,216,192,0.08)';
-    imgBtn.title = `Imagem: ${file.name}`;
-  };
-  reader.readAsDataURL(file);
-  imgInput.value = ''; // permite selecionar o mesmo arquivo de novo
+  /* Feedback visual */
+  const shortName = name.length > 22 ? name.slice(0,20)+'…' : name;
+  attachBtn.style.borderColor = 'rgba(93,216,192,0.7)';
+  attachBtn.style.color       = '#5dd8c0';
+  attachBtn.style.background  = 'rgba(93,216,192,0.08)';
+  attachBtn.title             = `Anexado: ${shortName}`;
+
+  /* ── ÁUDIO: transcreve automaticamente ── */
+  if (AUDIO_TYPES.includes(mime) || mime.startsWith('audio/')) {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target.result.split(',')[1];
+
+      /* Mostra toast de transcrição */
+      msgInput.value = '';
+      msgInput.placeholder = '🎙 Transcrevendo áudio...';
+      msgInput.disabled    = true;
+      attachBtn.disabled   = true;
+
+      try {
+        const res = await fetch('/.netlify/functions/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioBase64: base64, mimeType: mime, fileName: name })
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Erro na transcrição');
+
+        /* Cola o texto transcrito no input */
+        msgInput.value = data.text;
+        msgInput.placeholder = 'Pergunte algo ao agente...';
+
+        /* Reset visual */
+        attachBtn.style.borderColor = 'rgba(255,255,255,0.12)';
+        attachBtn.style.color       = 'rgba(255,255,255,0.45)';
+        attachBtn.style.background  = 'transparent';
+        attachBtn.title             = 'Anexar arquivo';
+
+        /* Foca o input para o usuário revisar */
+        msgInput.focus();
+
+      } catch (err) {
+        msgInput.placeholder = `⚠ ${err.message}`;
+        setTimeout(() => { msgInput.placeholder = 'Pergunte algo ao agente...'; }, 3000);
+        attachBtn.style.borderColor = 'rgba(255,80,80,0.5)';
+        attachBtn.style.color       = 'rgba(255,120,120,0.8)';
+      } finally {
+        msgInput.disabled  = false;
+        attachBtn.disabled = false;
+      }
+    };
+    reader.readAsDataURL(file);
+    fileInput.value = '';
+    return; // não seta pendingImage para áudio
+  }
+
+  /* ── IMAGEM: comportamento original ── */
+  if (IMAGE_TYPES.includes(mime) || mime.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const base64 = e.target.result.split(',')[1];
+      pendingImage = { base64, mime, name };
+    };
+    reader.readAsDataURL(file);
+    fileInput.value = '';
+    return;
+  }
+
+  /* ── PDF: envia como documento ao Gemini ── */
+  if (mime === PDF_TYPE) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const base64 = e.target.result.split(',')[1];
+      // Reutiliza pendingImage mas com tipo PDF (Gemini aceita application/pdf via inline_data)
+      pendingImage = { base64, mime: 'application/pdf', name };
+      if (!msgInput.value.trim()) msgInput.value = 'Analise este PDF e faça um resumo.';
+    };
+    reader.readAsDataURL(file);
+    fileInput.value = '';
+    return;
+  }
+
+  /* ── TEXTO / CSV / JSON: lê e cola no contexto ── */
+  if (TEXT_TYPES.some(t => mime.startsWith(t.split('/')[0]) && mime.includes(t.split('/')[1])) || mime.startsWith('text/')) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const content = e.target.result;
+      const preview = content.slice(0, 8000); // Gemini tem limite; 8k chars é seguro
+      pendingImage = null;
+      // Injeta conteúdo como contexto de texto no input
+      msgInput.value = `Arquivo: ${name}\n\n${preview}${content.length > 8000 ? '\n\n[... conteúdo truncado ...]' : ''}`;
+      msgInput.focus();
+      /* Reset visual */
+      attachBtn.style.borderColor = 'rgba(255,255,255,0.12)';
+      attachBtn.style.color       = 'rgba(255,255,255,0.45)';
+      attachBtn.style.background  = 'transparent';
+      attachBtn.title             = 'Anexar arquivo';
+    };
+    reader.readAsText(file, 'utf-8');
+    fileInput.value = '';
+    return;
+  }
+
+  /* ── OUTROS tipos: avisa o usuário ── */
+  attachBtn.style.borderColor = 'rgba(255,180,50,0.6)';
+  attachBtn.style.color       = 'rgba(255,210,100,0.9)';
+  attachBtn.title             = `Tipo não suportado: ${mime || 'desconhecido'}`;
+  setTimeout(() => {
+    attachBtn.style.borderColor = 'rgba(255,255,255,0.12)';
+    attachBtn.style.color       = 'rgba(255,255,255,0.45)';
+    attachBtn.style.background  = 'transparent';
+    attachBtn.title             = 'Anexar arquivo';
+  }, 2500);
+  fileInput.value = '';
 });
 /* ─── DETECÇÃO DE PEDIDO DE IMAGEM ─── */
 function isImageRequest(text) {
