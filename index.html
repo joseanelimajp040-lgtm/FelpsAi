@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Syntax Highlighting -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -3094,6 +3096,354 @@ dlBtn.addEventListener('click', async function () {
     }
   };
 
+})();
+</script>
+<script>
+(function () {
+  'use strict';
+ 
+  /* ──────────────────────────────────────────────────────────────
+     ESTADO INTERNO
+  ────────────────────────────────────────────────────────────── */
+  let lastAIText    = '';   // última resposta de texto da IA
+  let capturedImage = null; // { base64, mime } — espelho do pendingImage
+ 
+  /* ──────────────────────────────────────────────────────────────
+     ESPELHA A IMAGEM PENDENTE (sem depender do escopo externo)
+     Roda em capture phase → antes do handler original do img-input
+  ────────────────────────────────────────────────────────────── */
+  document.getElementById('img-input').addEventListener('change', function () {
+    const file = this.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      capturedImage = { base64: e.target.result.split(',')[1], mime: file.type };
+    };
+    reader.readAsDataURL(file);
+  }, true);
+ 
+  /* ──────────────────────────────────────────────────────────────
+     CAPTURA A ÚLTIMA RESPOSTA DA IA
+     Sobrepõe saveToHistory (função global do app)
+  ────────────────────────────────────────────────────────────── */
+  const _origSave = window.saveToHistory;
+  window.saveToHistory = function (q, a) {
+    if (_origSave) _origSave(q, a);
+    // Ignora marcadores como "[imagem gerada]" ou "[site aberto: ...]"
+    if (a && !a.startsWith('[')) lastAIText = a;
+  };
+ 
+  /* ──────────────────────────────────────────────────────────────
+     CARREGAMENTO LAZY DE LIBS (só quando realmente necessário)
+  ────────────────────────────────────────────────────────────── */
+  const LIB = {
+    jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    xlsx:  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+  };
+  function loadLib(src) {
+    return new Promise(resolve => {
+      if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src; s.onload = resolve;
+      document.head.appendChild(s);
+    });
+  }
+ 
+  /* ──────────────────────────────────────────────────────────────
+     DETECÇÃO DE COMANDOS DE ARQUIVO
+  ────────────────────────────────────────────────────────────── */
+  const ACTION_RE = /\b(transform[ae]r?|convert[ae]r?|export[ae]r?|salv[ae]r?|ger[ae]r?|cri[ae]r?|baixar?|faz[ae]r?|quero|gera|cria|converte)\b/i;
+  const TYPE_MAP  = [
+    { re: /\b(em\s+pdf|para\s+pdf|como\s+pdf|\.pdf|um\s+pdf|gerar?\s+pdf|pdf\s+d[ao])\b/i,             type: 'pdf'  },
+    { re: /\b(em\s+txt|para\s+txt|como\s+txt|\.txt|texto\s+puro|arquivo\s+de\s+texto)\b/i,             type: 'txt'  },
+    { re: /\b(excel|xlsx|\.xlsx|planilha)\b/i,                                                          type: 'xlsx' },
+    { re: /\b(word|docx|\.docx?|documento\s+word)\b/i,                                                  type: 'docx' },
+  ];
+ 
+  function detectFileCmd(text) {
+    if (!ACTION_RE.test(text)) return null;
+    for (const t of TYPE_MAP) if (t.re.test(text)) return t.type;
+    return null;
+  }
+ 
+  /* ──────────────────────────────────────────────────────────────
+     GERADOR — PDF (suporta imagem e texto)
+  ────────────────────────────────────────────────────────────── */
+  async function makePDF(source) {
+    await loadLib(LIB.jspdf);
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+    const W = pdf.internal.pageSize.getWidth();
+    const H = pdf.internal.pageSize.getHeight();
+    const M = 18;
+ 
+    if (source.type === 'image') {
+      /* ── Imagem centralizada na página ── */
+      const img = new Image();
+      img.src = `data:${source.mime};base64,${source.base64}`;
+      await new Promise(r => { img.onload = r; });
+      const ratio = Math.min((W - M * 2) / img.width, (H - M * 2) / img.height);
+      const iw = img.width * ratio, ih = img.height * ratio;
+      const fmt = source.mime.includes('png') ? 'PNG' : 'JPEG';
+      pdf.addImage(img, fmt, (W - iw) / 2, (H - ih) / 2, iw, ih);
+ 
+    } else {
+      /* ── Cabeçalho estilizado ── */
+      pdf.setFillColor(13, 19, 33);
+      pdf.rect(0, 0, W, 26, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(13);
+      pdf.setTextColor(93, 216, 192);
+      pdf.text('Gênesis AI', M, 16);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(130, 160, 190);
+      pdf.text(new Date().toLocaleString('pt-BR'), W - M, 16, { align: 'right' });
+ 
+      /* ── Corpo do texto ── */
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(11);
+      pdf.setTextColor(40, 40, 50);
+ 
+      const text  = source.text || '';
+      const lines = pdf.splitTextToSize(text, W - M * 2);
+      let y = 38;
+ 
+      for (const line of lines) {
+        if (y > H - M) { pdf.addPage(); y = M; }
+        pdf.text(line, M, y);
+        y += 6.5;
+      }
+    }
+ 
+    const name = `genesis-${Date.now()}.pdf`;
+    pdf.save(name);
+    return name;
+  }
+ 
+  /* ──────────────────────────────────────────────────────────────
+     GERADOR — TXT (zero dependências)
+  ────────────────────────────────────────────────────────────── */
+  function makeTXT(text) {
+    const header = `Gênesis AI — ${new Date().toLocaleString('pt-BR')}\n${'─'.repeat(40)}\n\n`;
+    const blob   = new Blob([header + text], { type: 'text/plain;charset=utf-8' });
+    const name   = `genesis-${Date.now()}.txt`;
+    triggerDL(blob, name);
+    return name;
+  }
+ 
+  /* ──────────────────────────────────────────────────────────────
+     GERADOR — Excel (.xlsx)
+  ────────────────────────────────────────────────────────────── */
+  async function makeXLSX(text) {
+    await loadLib(LIB.xlsx);
+    const XL = window.XLSX;
+    const wb = XL.utils.book_new();
+    const lines = text.split('\n').filter(l => l.trim());
+ 
+    let rows;
+    if (lines.some(l => l.includes('|'))) {
+      /* Tabela markdown → colunas */
+      rows = lines
+        .filter(l => !/^\|[-\s|]+\|$/.test(l))
+        .map(l => l.split('|').filter(c => c.trim()).map(c => c.trim()));
+    } else if (lines.some(l => l.includes('\t'))) {
+      rows = lines.map(l => l.split('\t'));
+    } else {
+      rows = lines.map(l => [l]);
+    }
+ 
+    const ws = XL.utils.aoa_to_sheet(rows);
+    /* Largura automática nas colunas */
+    const colW = rows[0]?.map((_, ci) => ({
+      wch: Math.max(...rows.map(r => (r[ci] || '').toString().length), 10)
+    }));
+    if (colW) ws['!cols'] = colW;
+ 
+    XL.utils.book_append_sheet(wb, ws, 'Gênesis AI');
+    const name = `genesis-${Date.now()}.xlsx`;
+    XL.writeFile(wb, name);
+    return name;
+  }
+ 
+  /* ──────────────────────────────────────────────────────────────
+     GERADOR — Word (.doc via namespace MSWord)
+     Abre corretamente no Word, LibreOffice, Google Docs
+  ────────────────────────────────────────────────────────────── */
+  function makeDOC(text) {
+    function esc(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    const body = text.split('\n')
+      .map(l => l.trim() ? `<p>${esc(l)}</p>` : '<p>&nbsp;</p>')
+      .join('\n');
+ 
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: Calibri, sans-serif; font-size: 11pt;
+           color: #1a1a2e; margin: 2cm 2.5cm; line-height: 1.65; }
+    h1   { font-size: 15pt; color: #0d6e6e; border-bottom: 1pt solid #cde;
+           padding-bottom: 6pt; margin-bottom: 14pt; }
+    p    { margin: 4pt 0; }
+  </style>
+</head>
+<body>
+  <h1>Gênesis AI &mdash; ${new Date().toLocaleString('pt-BR')}</h1>
+  ${body}
+</body>
+</html>`;
+ 
+    const blob = new Blob([html], { type: 'application/msword' });
+    const name = `genesis-${Date.now()}.doc`;
+    triggerDL(blob, name);
+    return name;
+  }
+ 
+  /* ──────────────────────────────────────────────────────────────
+     UTILITÁRIO — dispara download via <a>
+  ────────────────────────────────────────────────────────────── */
+  function triggerDL(blob, name) {
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
+  }
+ 
+  /* ──────────────────────────────────────────────────────────────
+     UI — Card "arquivo pronto" exibido na gaveta
+  ────────────────────────────────────────────────────────────── */
+  const TYPE_META = {
+    pdf:  { icon: 'picture_as_pdf', label: 'PDF',   color: '#ff8080' },
+    txt:  { icon: 'description',    label: 'TXT',   color: '#5dd8c0' },
+    xlsx: { icon: 'table_chart',    label: 'Excel', color: '#6bcb77' },
+    docx: { icon: 'article',        label: 'Word',  color: '#6699ff' },
+  };
+ 
+  function showFileCard(filename, type) {
+    const rc  = document.getElementById('rich-content');
+    const rh  = document.getElementById('reply-hint');
+    const dot = document.getElementById('live-dot');
+    const fs  = document.getElementById('footer-status');
+    const m   = TYPE_META[type] || { icon: 'download', label: type.toUpperCase(), color: '#5dd8c0' };
+ 
+    if (rh)  rh.style.display = 'none';
+    rc.innerHTML = '';
+ 
+    rc.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:16px;animation:fadeUp .4s cubic-bezier(.16,1,.3,1) both">
+ 
+        <!-- Ícone + nome -->
+        <div style="display:flex;align-items:center;gap:14px">
+          <div style="width:48px;height:48px;border-radius:13px;flex-shrink:0;
+            background:${m.color}1a;border:1px solid ${m.color}44;
+            display:flex;align-items:center;justify-content:center">
+            <span class="material-symbols-outlined" style="font-size:24px;color:${m.color}">${m.icon}</span>
+          </div>
+          <div>
+            <div style="font-size:15px;font-weight:600;color:rgba(230,245,255,.95);margin-bottom:3px">
+              Arquivo ${m.label} gerado com sucesso!
+            </div>
+            <div style="font-size:10px;font-family:'Space Mono',monospace;
+              color:rgba(255,255,255,.28);letter-spacing:.07em">${filename}</div>
+          </div>
+        </div>
+ 
+        <!-- Instrução -->
+        <div style="font-size:13.5px;line-height:1.7;color:rgba(175,205,225,.78)">
+          O download foi iniciado automaticamente. Verifique sua
+          <strong style="color:rgba(215,235,255,.9)">pasta de downloads</strong>.
+        </div>
+ 
+        <!-- Dica extra -->
+        <div style="display:flex;align-items:flex-start;gap:9px;
+          background:rgba(93,216,192,.05);border:1px solid rgba(93,216,192,.14);
+          border-radius:10px;padding:11px 14px;
+          font-size:12px;color:rgba(140,180,200,.65);line-height:1.6">
+          <span class="material-symbols-outlined" style="font-size:16px;color:rgba(93,216,192,.5);flex-shrink:0;margin-top:1px">info</span>
+          <span>Peça outra resposta à IA e use comandos como <em>"salve como PDF"</em>,
+          <em>"exportar em Excel"</em> ou <em>"gerar TXT"</em> para exportar qualquer conteúdo.</span>
+        </div>
+ 
+      </div>`;
+ 
+    if (dot) dot.classList.remove('active');
+    if (fs)  fs.textContent = `${m.label} pronto`;
+  }
+ 
+  /* ──────────────────────────────────────────────────────────────
+     INTERCEPTA O BOTÃO DE ENVIO (capture phase = roda antes do Gemini)
+  ────────────────────────────────────────────────────────────── */
+  document.getElementById('send-btn').addEventListener('click', async function (e) {
+    const inputEl  = document.getElementById('msg-input');
+    const txt      = inputEl.value.trim();
+    if (!txt) return;
+ 
+    const fileType  = detectFileCmd(txt);
+    if (!fileType) return;
+ 
+    /* Verifica contexto disponível para exportar */
+    const isImgPDF = /imagem/i.test(txt) && fileType === 'pdf' && capturedImage;
+    const hasText  = lastAIText.trim().length > 30;
+ 
+    if (!isImgPDF && !hasText) return; // sem conteúdo para gerar arquivo → deixa Gemini responder normalmente
+ 
+    /* ── A partir daqui: interceptamos o evento ── */
+    e.stopImmediatePropagation();
+ 
+    inputEl.value = '';
+    document.getElementById('send-btn').disabled = true;
+    if (typeof setState  === 'function') setState('thinking');
+    if (typeof openPanel === 'function') openPanel();
+ 
+    const rh = document.getElementById('reply-hint');
+    const rc = document.getElementById('rich-content');
+    if (rc) rc.innerHTML = '';
+    if (rh) { rh.style.display = 'block'; rh.textContent = 'Gerando arquivo...'; }
+ 
+    try {
+      let filename;
+ 
+      if (isImgPDF) {
+        /* Imagem → PDF */
+        filename = await makePDF({ type: 'image', base64: capturedImage.base64, mime: capturedImage.mime });
+        capturedImage = null; // consome a imagem capturada
+ 
+        /* Reseta visual do botão de imagem */
+        const imgBtn = document.getElementById('img-btn');
+        if (imgBtn) {
+          imgBtn.style.borderColor = 'rgba(255,255,255,0.12)';
+          imgBtn.style.color       = 'rgba(255,255,255,0.45)';
+          imgBtn.style.background  = 'transparent';
+          imgBtn.title             = 'Enviar imagem';
+        }
+      } else if (fileType === 'pdf')  { filename = await makePDF({ type: 'text', text: lastAIText }); }
+        else if (fileType === 'txt')  { filename = makeTXT(lastAIText); }
+        else if (fileType === 'xlsx') { filename = await makeXLSX(lastAIText); }
+        else if (fileType === 'docx') { filename = makeDOC(lastAIText); }
+ 
+      if (typeof setState       === 'function') setState('responding');
+      if (typeof saveToHistory  === 'function') saveToHistory(txt, `[arquivo gerado: ${filename}]`);
+      showFileCard(filename, fileType);
+ 
+    } catch (err) {
+      const rh = document.getElementById('reply-hint');
+      if (rh) { rh.style.display = 'block'; rh.textContent = `⚠ ${err.message}`; }
+      console.error('[FileGen]', err);
+    } finally {
+      setTimeout(() => {
+        if (typeof setState === 'function') setState('idle');
+        document.getElementById('send-btn').disabled = false;
+      }, 900);
+    }
+ 
+  }, true /* ← capture: executa ANTES dos handlers do Gemini e do vídeo */);
+ 
 })();
 </script>
 </body>
