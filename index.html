@@ -992,6 +992,100 @@ body, html { overscroll-behavior: none; }
   #artifact-panel.open { transform: translateY(0); }
   .artifact-panel-glass { border-radius: 22px 22px 0 0; }
 }
+
+/* ══ MOBILE WELCOME HEADING ══ */
+#mobile-welcome {
+  display: none;
+  position: fixed;
+  top: calc(70px + env(safe-area-inset-top, 0px));
+  left: 0; right: 0;
+  z-index: 10;
+  text-align: center;
+  padding: 0 28px;
+  pointer-events: none;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.4s cubic-bezier(0.16,1,0.3,1),
+              transform 0.4s cubic-bezier(0.16,1,0.3,1);
+}
+#mobile-welcome.mw-hidden {
+  opacity: 0;
+  transform: translateY(-14px);
+}
+#mw-sub {
+  font-size: 10px;
+  font-family: 'Space Mono', monospace;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(93,216,192,0.5);
+  margin: 0 0 12px;
+}
+#mw-title {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.18;
+  color: rgba(235,245,255,0.95);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+/* ══ MOBILE INPUT: LAYOUT EM 2 LINHAS ══ */
+@media (max-width: 768px) {
+  #mobile-welcome { display: block; }
+
+  .input-wrapper {
+    border-radius: 22px !important;
+    padding: 14px 12px 12px 16px !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    gap: 0 !important;
+  }
+
+  /* Linha 1: textarea ocupa 100% do topo */
+  #msg-input {
+    order: 1 !important;
+    flex: 0 0 100% !important;
+    width: 100% !important;
+    min-height: 28px !important;
+    height: auto !important;
+    line-height: 1.5 !important;
+    margin: 0 0 10px !important;
+    padding: 0 !important;
+  }
+
+  /* Linha 2: botões */
+  #attach-btn {
+    order: 2 !important;
+    margin-right: 4px !important;
+  }
+
+  /* Hint "· · ·" entre botões */
+  #mobile-input-dots {
+    order: 3;
+    flex: 1;
+    text-align: center;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.3em;
+    color: rgba(255,255,255,0.15);
+    pointer-events: none;
+    user-select: none;
+  }
+
+<span id="mobile-input-dots" aria-hidden="true">· · ·</span>
+
+  #mic-btn {
+    order: 4 !important;
+    margin-right: 8px !important;
+  }
+
+  #send-btn {
+    order: 5 !important;
+    width: 42px !important;
+    height: 42px !important;
+  }
+}
 </style>
 </head>
 <body>
@@ -1058,6 +1152,12 @@ body, html { overscroll-behavior: none; }
     </div>
   </div>
 
+<!-- MOBILE WELCOME HEADING -->
+<div id="mobile-welcome">
+  <p id="mw-sub">Gênesis · Interface Neural</p>
+  <h1 id="mw-title">O que você<br>quer explorar?</h1>
+</div>
+  
  <!-- SIDE PANEL: Transmissão Neural -->
 <div id="neural-panel">
   <div class="glass-panel">
@@ -3558,6 +3658,25 @@ dlBtn.addEventListener('click', async function () {
  
   }, true /* ← capture: executa ANTES dos handlers do Gemini e do vídeo */);
  
+})();
+
+/* ── MOBILE WELCOME: mostra/esconde com o painel ── */
+(function () {
+  const mw = document.getElementById('mobile-welcome');
+  if (!mw) return;
+
+  const _origOpen  = window.openPanel;
+  const _origClose = window.closeNeuralPanel;
+
+  window.openPanel = function () {
+    if (_origOpen) _origOpen();
+    mw.classList.add('mw-hidden');
+  };
+
+  window.closeNeuralPanel = function () {
+    if (_origClose) _origClose();
+    mw.classList.remove('mw-hidden');
+  };
 })();
 </script>
 </body>
