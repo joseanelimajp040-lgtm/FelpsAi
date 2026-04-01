@@ -3835,16 +3835,6 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
       return;
     }
 
-    /* Busca chave */
-    let key;
-    try { key = await fetchKey(); }
-    catch (err) {
-      showErr('⚠ ' + err.message);
-      resetBtn();
-      if (typeof setState === 'function') setState('idle');
-      return;
-    }
-
     /* --- INÍCIO DA BUSCA DINÂMICA (A MÁGICA CONTRA OS BUGS DA GOOGLE) --- */
     if (rh) { rh.textContent = 'Negociando modelo com a Google…'; }
     let validLiveModel = 'models/gemini-2.0-flash'; // Fallback caso tudo falhe
@@ -3886,6 +3876,7 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
                     'Seja conciso nas respostas.'
             }]
           }
+        }
       }));
     };
     
