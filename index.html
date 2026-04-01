@@ -3738,15 +3738,15 @@ dlBtn.addEventListener('click', async function () {
     mw.classList.remove('mw-hidden');
   };
 })();
-</script>
 <script>
 /* ═══════════════════════════════════════════════════════════════
-   MÓDULO: Gemini Live Mode
+   MÓDULO: Gemini Live Mode (CORRIGIDO)
 ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
 
-  const WS_BASE = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
+  // FIX 3: Usando v1alpha, que é a rota mais estável para WebSockets (BidiGenerateContent)
+  const WS_BASE = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent`;
 
   let ws            = null;
   let liveActive    = false;
@@ -3843,10 +3843,12 @@ dlBtn.addEventListener('click', async function () {
         }
       }));
 
-      /* Atualiza volume na esfera neural */
       let sum = 0;
       for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
-      audioVolume = Math.min(1, Math.sqrt(sum / f32.length) * 10);
+      // Ajuste global de volume da esfera
+      if (typeof audioVolume !== 'undefined') {
+        audioVolume = Math.min(1, Math.sqrt(sum / f32.length) * 10);
+      }
     };
 
     sourceNode.connect(processor);
@@ -3866,9 +3868,9 @@ dlBtn.addEventListener('click', async function () {
     safeDisconnect(sourceNode); sourceNode = null;
     if (audioCtx)  { try { audioCtx.close(); } catch (_) {} audioCtx = null; }
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
-    if (ws)        { try { ws.close();        } catch (_) {} ws       = null; }
+    if (ws)        { try { ws.close();        } catch (_) {} ws        = null; }
 
-    audioVolume = 0;
+    if (typeof audioVolume !== 'undefined') audioVolume = 0;
 
     resetBtn();
     if (liveDotEl)  liveDotEl.classList.remove('active');
@@ -3911,9 +3913,9 @@ dlBtn.addEventListener('click', async function () {
       return;
     }
 
-    /* Busca dinâmica do modelo com suporte a bidiGenerateContent */
     if (rh) { rh.textContent = 'Negociando modelo com a Google…'; }
-    let validLiveModel = 'models/gemini-2.0-flash-live-001';
+    // O modelo base experimental para Live é o mais garantido:
+    let validLiveModel = 'models/gemini-2.0-flash-exp'; 
     try {
       const resModels = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
       const dataModels = await resModels.json();
@@ -3932,7 +3934,8 @@ dlBtn.addEventListener('click', async function () {
         setup: {
           model: validLiveModel,
           generationConfig: {
-            responseModalities: ['AUDIO', 'TEXT'],
+            // FIX 2: Apenas 'AUDIO' aqui. Evita o erro 1007. O texto vem embutido por padrão.
+            responseModalities: ['AUDIO'], 
             speechConfig: {
               voiceConfig: {
                 prebuiltVoiceConfig: { voiceName: 'Aoede' }
@@ -3941,7 +3944,7 @@ dlBtn.addEventListener('click', async function () {
           },
           systemInstruction: {
             parts: [{
-              text: 'Você é Gênesis, uma inteligência artificial desenvolvida pela FelpsAi. ' +
+              text: 'Você é Gênesis, uma inteligência artificial. ' +
                     'Responda sempre em português brasileiro, de forma natural e conversacional. ' +
                     'Seja conciso nas respostas.'
             }]
@@ -3985,26 +3988,47 @@ dlBtn.addEventListener('click', async function () {
       }
 
       /* Áudio da IA */
-      const audioPart = msg.serverContent?.modelTurn?.parts?.find(p => p.inlineData?.mimeType?.startsWith('audio/'));
+      const audioPart = msg.serverContent?.modelTurn?.parts?.find(p => p.inlineData?.mimeType?.startsWith('audio/pcm'));
       if (audioPart?.inlineData?.data) {
         try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          const raw2 = atob(audioPart.inlineData.data);
-          const buf  = new Uint8Array(raw2.length);
-          for (let i = 0; i < raw2.length; i++) buf[i] = raw2.charCodeAt(i);
-          const decoded = await ctx.decodeAudioData(buf.buffer);
-          const src = ctx.createBufferSource();
-          src.buffer = decoded;
-          src.connect(ctx.destination);
+          if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          
+          // FIX 1: Decodificação manual do Raw PCM 24kHz (Little-endian)
+          const rawBase64 = atob(audioPart.inlineData.data);
+          const pcm16 = new Int16Array(rawBase64.length / 2);
+          for (let i = 0; i < rawBase64.length / 2; i++) {
+            const byte1 = rawBase64.charCodeAt(i * 2);
+            const byte2 = rawBase64.charCodeAt(i * 2 + 1);
+            pcm16[i] = byte1 | (byte2 << 8); 
+          }
+          
+          const f32 = new Float32Array(pcm16.length);
+          for (let i = 0; i < pcm16.length; i++) {
+            f32[i] = pcm16[i] / 32768; // Converte para Float32 (-1.0 a 1.0)
+          }
+          
+          // O Gemini Live retorna sempre a 24000 Hz
+          const audioBuffer = audioCtx.createBuffer(1, f32.length, 24000);
+          audioBuffer.getChannelData(0).set(f32);
+          
+          const src = audioCtx.createBufferSource();
+          src.buffer = audioBuffer;
+          src.connect(audioCtx.destination);
           src.start();
-        } catch (_) {}
+        } catch (err) {
+          console.error("Erro ao decodificar áudio PCM:", err);
+        }
       }
 
       /* Turno do usuário */
-      const inputTrans = msg.serverContent?.inputTranscription?.text;
-      if (inputTrans) {
+      const inputTrans = msg.serverContent?.interrupted ? null : msg.serverContent?.modelTurn?.parts?.find(p => p.text); // simplificado
+      // Nota: A transcrição real do usuário vem geralmente em msg.serverContent?.inputTranscription
+      const userTranscript = msg.serverContent?.inputTranscription?.text;
+      
+      if (userTranscript) {
         currentUserEl = createMsgEl('user');
-        currentUserEl.querySelector('.live-msg-text').textContent = inputTrans;
+        currentUserEl.querySelector('.live-msg-text').textContent = userTranscript;
+        userText = userTranscript;
         currentAiEl   = null;
         aiText        = '';
         document.getElementById('reply-area').scrollTop = 99999;
@@ -4013,29 +4037,29 @@ dlBtn.addEventListener('click', async function () {
       /* Fim do turno da IA */
       if (msg.serverContent?.turnComplete) {
         currentAiEl = null;
-        aiText      = '';
         if (typeof saveToHistory === 'function' && userText && aiText) {
           saveToHistory(userText, aiText);
         }
+        aiText = '';
       }
     };
 
     ws.onerror = () => {
-  showErr('⚠ Erro na conexão WebSocket.');
-  if (liveActive) stopLive();
-  else { resetBtn(); if (typeof setState === 'function') setState('idle'); }
-};
+      showErr('⚠ Erro na conexão WebSocket.');
+      if (liveActive) stopLive();
+      else { resetBtn(); if (typeof setState === 'function') setState('idle'); }
+    };
+    
     ws.onclose = () => {
-  if (liveActive) {
-    stopLive();
-  } else {
-    // Falhou antes do setupComplete
-    showErr('⚠ Conexão encerrada. Verifique a chave da API.');
-    resetBtn();
-    if (typeof setState === 'function') setState('idle');
-    if (liveDotEl) liveDotEl.classList.remove('active');
-  }
-};
+      if (liveActive) {
+        stopLive();
+      } else {
+        showErr('⚠ Conexão encerrada. Verifique a chave ou o modelo.');
+        resetBtn();
+        if (typeof setState === 'function') setState('idle');
+        if (liveDotEl) liveDotEl.classList.remove('active');
+      }
+    };
   }
 
   /* ─── Bind do botão ─── */
