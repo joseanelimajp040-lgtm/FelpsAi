@@ -3740,17 +3740,15 @@ dlBtn.addEventListener('click', async function () {
 })();
 </script>
 <script>
+<script>
 /* ═══════════════════════════════════════════════════════════════
    MÓDULO: Gemini Live Mode
-   Requer: netlify/functions/gemini-live-key.js
-   Modelo: gemini-2.0-flash-live-001 (disponível no free tier)
 ═══════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
 
-const LIVE_MODEL = 'models/gemini-2.0-flash-live-001'; 
-const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
-  
+  const WS_BASE = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
+
   let ws            = null;
   let liveActive    = false;
   let audioCtx      = null;
@@ -3808,101 +3806,16 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
     return el;
   }
 
-  /* ─── INICIAR LIVE ─── */
-  async function startLive() {
-    if (liveActive) return;
+  /* ─── Helpers visuais ─── */
+  function resetBtn() {
+    liveBtn.classList.remove('live-active');
+    liveBtn.title = 'Modo Live — conversação em tempo real';
+  }
 
-    /* Para o mic principal se estiver escutando */
-    if (typeof isListening !== 'undefined' && isListening) {
-      if (typeof stopListening === 'function') stopListening(false);
-    }
+  function showErr(msg) {
+    if (rh) { rh.style.display = 'block'; rh.textContent = msg; }
+  }
 
-    liveBtn.classList.add('live-active');
-    liveBtn.title = 'Parar Modo Live';
-    if (typeof openPanel === 'function') openPanel();
-    if (typeof setState  === 'function') setState('thinking');
-
-    rc.innerHTML = '';
-    if (rh) { rh.style.display = 'block'; rh.textContent = 'Conectando ao servidor Live…'; }
-
-    /* Busca chave */
-    let key;
-    try { key = await fetchKey(); }
-    catch (err) {
-      showErr('⚠ ' + err.message);
-      resetBtn();
-      if (typeof setState === 'function') setState('idle');
-      return;
-    }
-
-    /* --- INÍCIO DA BUSCA DINÂMICA (Sem filtro, pegando o melhor modelo) --- */
-    if (rh) { rh.textContent = 'Negociando modelo com a Google…'; }
-    let validLiveModel = 'models/gemini-2.5-flash'; 
-    try {
-      const resModels = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-      const dataModels = await resModels.json();
-      
-      const liveModel = dataModels.models.find(m => 
-        m.supportedGenerationMethods && m.supportedGenerationMethods.includes("bidiGenerateContent")
-      );
-      if (liveModel) validLiveModel = liveModel.name;
-    } catch(e) {}
-    /* --- FIM DA BUSCA DINÂMICA --- */
-
-    if (rh) { rh.textContent = 'Conectando ao servidor Live…'; }
-
-    const WS_BASE = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
-    ws = new WebSocket(`${WS_BASE}?key=${key}`);
-
-    let nextAudioTime = 0; // Controle para os pedaços de áudio não encavalarem
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({
-        setup: {
-          model: validLiveModel, 
-          generationConfig: { 
-            responseModalities: ['AUDIO', 'TEXT'], // Pedimos texto E áudio
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName: "Aoede" // Voz feminina e calma da Google
-                }
-              }
-            }
-          },
-          systemInstruction: {
-            parts: [{
-              text: 'Você é Gênesis, uma inteligência artificial desenvolvida pela FelpsAi. ' +
-                    'Responda sempre em português brasileiro, de forma natural e conversacional. ' +
-                    'Seja conciso nas respostas.'
-            }]
-          }
-        }
-      }));
-    };
-
-    ws.onmessage = async (ev) => {
-      const raw = ev.data instanceof Blob ? await ev.data.text() : ev.data;
-      let msg;
-      try { msg = JSON.parse(raw); } catch { return; }
-
-      if (msg.setupComplete) {
-        liveActive = true;
-        if (rh) rh.style.display = 'none';
-        if (liveDotEl) liveDotEl.classList.add('active');
-        if (footerStat) footerStat.textContent = 'live ativo';
-        if (typeof setState === 'function') setState('idle');
-
-        const hdr = document.createElement('div');
-        hdr.className = 'live-header';
-        hdr.innerHTML = `<span class="material-symbols-outlined">stream</span> Modo Live Ativo — fale agora`;
-        rc.appendChild(hdr);
-
-        try { await startAudio(); }
-        catch (err) { showErr('⚠ Microfone: ' + err.message); stopLive(); }
-        return;
-      }
-      
   /* ─── CAPTURA DE ÁUDIO → PCM 16k ─── */
   async function startAudio() {
     micStream = await navigator.mediaDevices.getUserMedia({
@@ -3956,7 +3869,7 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
     if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
     if (ws)        { try { ws.close();        } catch (_) {} ws       = null; }
 
-    audioVolume = 0; // reseta volume da esfera
+    audioVolume = 0;
 
     resetBtn();
     if (liveDotEl)  liveDotEl.classList.remove('active');
@@ -3974,17 +3887,145 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
     }, 3000);
   }
 
-  /* ─── Helpers visuais ─── */
-  function resetBtn() {
-    liveBtn.classList.remove('live-active');
-    liveBtn.title = 'Modo Live — conversação em tempo real';
+  /* ─── INICIAR LIVE ─── */
+  async function startLive() {
+    if (liveActive) return;
+
+    if (typeof isListening !== 'undefined' && isListening) {
+      if (typeof stopListening === 'function') stopListening(false);
+    }
+
+    liveBtn.classList.add('live-active');
+    liveBtn.title = 'Parar Modo Live';
+    if (typeof openPanel === 'function') openPanel();
+    if (typeof setState  === 'function') setState('thinking');
+
+    rc.innerHTML = '';
+    if (rh) { rh.style.display = 'block'; rh.textContent = 'Conectando ao servidor Live…'; }
+
+    let key;
+    try { key = await fetchKey(); }
+    catch (err) {
+      showErr('⚠ ' + err.message);
+      resetBtn();
+      if (typeof setState === 'function') setState('idle');
+      return;
+    }
+
+    /* Busca dinâmica do modelo com suporte a bidiGenerateContent */
+    if (rh) { rh.textContent = 'Negociando modelo com a Google…'; }
+    let validLiveModel = 'models/gemini-2.0-flash-live-001';
+    try {
+      const resModels = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+      const dataModels = await resModels.json();
+      const liveModel = dataModels.models?.find(m =>
+        m.supportedGenerationMethods?.includes('bidiGenerateContent')
+      );
+      if (liveModel) validLiveModel = liveModel.name;
+    } catch (e) {}
+
+    if (rh) { rh.textContent = 'Conectando ao servidor Live…'; }
+
+    ws = new WebSocket(`${WS_BASE}?key=${key}`);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        setup: {
+          model: validLiveModel,
+          generationConfig: {
+            responseModalities: ['AUDIO', 'TEXT'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: 'Aoede' }
+              }
+            }
+          },
+          systemInstruction: {
+            parts: [{
+              text: 'Você é Gênesis, uma inteligência artificial desenvolvida pela FelpsAi. ' +
+                    'Responda sempre em português brasileiro, de forma natural e conversacional. ' +
+                    'Seja conciso nas respostas.'
+            }]
+          }
+        }
+      }));
+    };
+
+    ws.onmessage = async (ev) => {
+      const raw = ev.data instanceof Blob ? await ev.data.text() : ev.data;
+      let msg;
+      try { msg = JSON.parse(raw); } catch { return; }
+
+      if (msg.setupComplete) {
+        liveActive = true;
+        if (rh) rh.style.display = 'none';
+        if (liveDotEl) liveDotEl.classList.add('active');
+        if (footerStat) footerStat.textContent = 'live ativo';
+        if (typeof setState === 'function') setState('idle');
+
+        const hdr = document.createElement('div');
+        hdr.className = 'live-header';
+        hdr.innerHTML = `<span class="material-symbols-outlined">stream</span> Modo Live Ativo — fale agora`;
+        rc.appendChild(hdr);
+
+        try { await startAudio(); }
+        catch (err) { showErr('⚠ Microfone: ' + err.message); stopLive(); }
+        return;
+      }
+
+      /* Texto da IA */
+      const textPart = msg.serverContent?.modelTurn?.parts?.find(p => p.text);
+      if (textPart?.text) {
+        if (!currentAiEl) {
+          currentAiEl = createMsgEl('ai');
+          aiText = '';
+        }
+        aiText += textPart.text;
+        currentAiEl.querySelector('.live-msg-text').textContent = aiText;
+        document.getElementById('reply-area').scrollTop = 99999;
+      }
+
+      /* Áudio da IA */
+      const audioPart = msg.serverContent?.modelTurn?.parts?.find(p => p.inlineData?.mimeType?.startsWith('audio/'));
+      if (audioPart?.inlineData?.data) {
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const raw2 = atob(audioPart.inlineData.data);
+          const buf  = new Uint8Array(raw2.length);
+          for (let i = 0; i < raw2.length; i++) buf[i] = raw2.charCodeAt(i);
+          const decoded = await ctx.decodeAudioData(buf.buffer);
+          const src = ctx.createBufferSource();
+          src.buffer = decoded;
+          src.connect(ctx.destination);
+          src.start();
+        } catch (_) {}
+      }
+
+      /* Turno do usuário */
+      const inputTrans = msg.serverContent?.inputTranscription?.text;
+      if (inputTrans) {
+        currentUserEl = createMsgEl('user');
+        currentUserEl.querySelector('.live-msg-text').textContent = inputTrans;
+        currentAiEl   = null;
+        aiText        = '';
+        document.getElementById('reply-area').scrollTop = 99999;
+      }
+
+      /* Fim do turno da IA */
+      if (msg.serverContent?.turnComplete) {
+        currentAiEl = null;
+        aiText      = '';
+        if (typeof saveToHistory === 'function' && userText && aiText) {
+          saveToHistory(userText, aiText);
+        }
+      }
+    };
+
+    ws.onerror = () => { showErr('⚠ Erro na conexão WebSocket.'); stopLive(); };
+    ws.onclose = () => { if (liveActive) stopLive(); };
   }
 
-  function showErr(msg) {
-    if (rh) { rh.style.display = 'block'; rh.textContent = msg; }
-  }
-
-  /* ─── Bind ─── */
+  /* ─── Bind do botão ─── */
   liveBtn.addEventListener('click', () => liveActive ? stopLive() : startLive());
 
 })();
