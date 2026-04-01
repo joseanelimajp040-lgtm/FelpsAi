@@ -3760,6 +3760,7 @@ dlBtn.addEventListener('click', async function () {
   let currentUserEl = null;
   let aiText        = '';
   let userText      = '';
+  let nextPlayTime  = 0;
 
   const liveBtn    = document.getElementById('live-btn');
   const rc         = document.getElementById('rich-content');
@@ -3863,6 +3864,7 @@ dlBtn.addEventListener('click', async function () {
     currentUserEl = null;
     aiText        = '';
     userText      = '';
+    nextPlayTime  = 0;
 
     const safeDisconnect = (node) => { try { node?.disconnect(); } catch (_) {} };
     safeDisconnect(processor);  processor  = null;
@@ -3935,7 +3937,6 @@ dlBtn.addEventListener('click', async function () {
         setup: {
           model: validLiveModel,
           generationConfig: {
-            // FIX 2: Apenas 'AUDIO' aqui. Evita o erro 1007. O texto vem embutido por padrão.
             responseModalities: ['AUDIO'], 
             speechConfig: {
               voiceConfig: {
@@ -3945,9 +3946,11 @@ dlBtn.addEventListener('click', async function () {
           },
           systemInstruction: {
             parts: [{
-              text: 'Você é Gênesis, uma inteligência artificial. ' +
-                    'Responda sempre em português brasileiro, de forma natural e conversacional. ' +
-                    'Seja conciso nas respostas.'
+              text: "Você é Gênesis, uma assistente neural criada por Felpsc137. " +
+                    "REGRAS ESTRITAS: " +
+                    "1. Você DEVE conversar e escrever EXCLUSIVAMENTE em Português do Brasil (pt-BR). " +
+                    "2. NUNCA imprima seus pensamentos internos, intenções ou ações entre asteriscos (como **Confirming...**). " +
+                    "3. Fale de forma natural, direta e conversacional."
             }]
           }
         }
@@ -3993,8 +3996,9 @@ dlBtn.addEventListener('click', async function () {
       if (audioPart?.inlineData?.data) {
         try {
           if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          // Tira o contexto do estado de suspensão (comum em alguns navegadores)
+          if (audioCtx.state === 'suspended') audioCtx.resume();
           
-          // FIX 1: Decodificação manual do Raw PCM 24kHz (Little-endian)
           const rawBase64 = atob(audioPart.inlineData.data);
           const pcm16 = new Int16Array(rawBase64.length / 2);
           for (let i = 0; i < rawBase64.length / 2; i++) {
@@ -4005,22 +4009,30 @@ dlBtn.addEventListener('click', async function () {
           
           const f32 = new Float32Array(pcm16.length);
           for (let i = 0; i < pcm16.length; i++) {
-            f32[i] = pcm16[i] / 32768; // Converte para Float32 (-1.0 a 1.0)
+            f32[i] = pcm16[i] / 32768; 
           }
           
-          // O Gemini Live retorna sempre a 24000 Hz
           const audioBuffer = audioCtx.createBuffer(1, f32.length, 24000);
           audioBuffer.getChannelData(0).set(f32);
           
           const src = audioCtx.createBufferSource();
           src.buffer = audioBuffer;
           src.connect(audioCtx.destination);
-          src.start();
+          
+          // O SEGREDO DO ÁUDIO LISO: A Fila de Reprodução
+          const currentTime = audioCtx.currentTime;
+          if (nextPlayTime < currentTime) {
+              // Se o áudio estava em silêncio, dá um fôlego de 50ms antes de começar
+              nextPlayTime = currentTime + 0.05; 
+          }
+          src.start(nextPlayTime);
+          nextPlayTime += audioBuffer.duration; // Adiciona o tempo desse pedaço na fila
+
         } catch (err) {
           console.error("Erro ao decodificar áudio PCM:", err);
         }
       }
-
+      
       /* Turno do usuário */
       const inputTrans = msg.serverContent?.interrupted ? null : msg.serverContent?.modelTurn?.parts?.find(p => p.text); // simplificado
       // Nota: A transcrição real do usuário vem geralmente em msg.serverContent?.inputTranscription
