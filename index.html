@@ -3868,7 +3868,7 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
       ws.send(JSON.stringify({
         setup: {
           model: validLiveModel, 
-          generationConfig: { responseModalities: ['TEXT'] },
+          generationConfig: { responseModalities: ['TEXT', 'AUDIO'] },
           systemInstruction: {
             parts: [{
               text: 'Você é Gênesis, uma inteligência artificial desenvolvida pela FelpsAi. ' +
