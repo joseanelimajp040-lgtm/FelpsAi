@@ -1086,6 +1086,63 @@ body, html { overscroll-behavior: none; }
     height: 42px !important;
   }
 }
+/* ── LIVE BUTTON ── */
+#live-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.45);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; margin-right: 6px; flex-shrink: 0;
+  transition: all 0.25s;
+}
+#live-btn:hover {
+  border-color: rgba(93,216,192,0.5);
+  color: #5dd8c0;
+}
+#live-btn.live-active {
+  border-color: rgba(255,80,80,0.7);
+  color: #ff5050;
+  background: rgba(255,80,80,0.08);
+  box-shadow: 0 0 14px rgba(255,80,80,0.25);
+  animation: mic-ring 1.4s ease-in-out infinite;
+}
+
+/* ── MENSAGENS DO LIVE MODE ── */
+.live-header {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.22em;
+  color: rgba(93,216,192,0.5); display: flex; align-items: center; gap: 7px;
+  margin-bottom: 14px; padding-bottom: 10px;
+  border-bottom: 1px solid rgba(93,216,192,0.12);
+}
+.live-header .material-symbols-outlined {
+  font-size: 13px;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+.live-msg {
+  margin-bottom: 14px;
+  animation: fadeUp 0.3s cubic-bezier(0.16,1,0.3,1) both;
+}
+.live-msg-role {
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.18em;
+  margin-bottom: 4px; display: block;
+}
+.live-msg-user .live-msg-role { color: rgba(255,255,255,0.28); }
+.live-msg-ai   .live-msg-role { color: rgba(93,216,192,0.6);   }
+
+.live-msg-text {
+  font-size: 14px; line-height: 1.78; display: block;
+}
+.live-msg-user .live-msg-text { color: rgba(190,215,235,0.6);  }
+.live-msg-ai   .live-msg-text { color: rgba(220,238,248,0.92); }
+
+.live-end-msg {
+  text-align: center; font-size: 10px;
+  font-family: 'Space Mono', monospace; letter-spacing: 0.14em;
+  color: rgba(255,255,255,0.18); margin-top: 16px; padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
 </style>
 </head>
 <body>
@@ -1206,6 +1263,9 @@ body, html { overscroll-behavior: none; }
 " onmouseover="this.style.borderColor='rgba(93,216,192,0.5)';this.style.color='#5dd8c0'"
    onmouseout="this.style.borderColor='rgba(255,255,255,0.12)';this.style.color='rgba(255,255,255,0.45)'">
   <span class="material-symbols-outlined" style="font-size:18px">attach_file</span>
+</button>
+<button id="live-btn" title="Modo Live — conversação em tempo real">
+  <span class="material-symbols-outlined" style="font-size:18px">stream</span>
 </button>
 <button id="mic-btn" title="Falar com o agente">
   <span class="material-symbols-outlined" style="font-size:18px">mic</span>
@@ -3677,6 +3737,275 @@ dlBtn.addEventListener('click', async function () {
     if (_origClose) _origClose();
     mw.classList.remove('mw-hidden');
   };
+})();
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   MÓDULO: Gemini Live Mode
+   Requer: netlify/functions/gemini-live-key.js
+   Modelo: gemini-2.0-flash-live-001 (disponível no free tier)
+═══════════════════════════════════════════════════════════════ */
+(function () {
+  'use strict';
+
+  const LIVE_MODEL = 'models/gemini-2.0-flash-live-001';
+  const WS_BASE    = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.BidiGenerateContent';
+
+  let ws            = null;
+  let liveActive    = false;
+  let audioCtx      = null;
+  let micStream     = null;
+  let processor     = null;
+  let sourceNode    = null;
+  let cachedKey     = null;
+  let currentAiEl   = null;
+  let currentUserEl = null;
+  let aiText        = '';
+  let userText      = '';
+
+  const liveBtn    = document.getElementById('live-btn');
+  const rc         = document.getElementById('rich-content');
+  const rh         = document.getElementById('reply-hint');
+  const liveDotEl  = document.getElementById('live-dot');
+  const footerStat = document.getElementById('footer-status');
+
+  /* ─── Busca chave via Netlify Function ─── */
+  async function fetchKey() {
+    if (cachedKey) return cachedKey;
+    const res  = await fetch('/.netlify/functions/gemini-live-key');
+    const data = await res.json();
+    if (!data.key) throw new Error('Chave API não encontrada');
+    cachedKey = data.key;
+    return cachedKey;
+  }
+
+  /* ─── Conversão Float32 → PCM Int16 → Base64 ─── */
+  function f32ToI16(buf) {
+    const out = new Int16Array(buf.length);
+    for (let i = 0; i < buf.length; i++) {
+      const s = Math.max(-1, Math.min(1, buf[i]));
+      out[i]  = s < 0 ? s * 32768 : s * 32767;
+    }
+    return out;
+  }
+
+  function ab2b64(ab) {
+    const u8 = new Uint8Array(ab);
+    let s = '';
+    for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]);
+    return btoa(s);
+  }
+
+  /* ─── Cria elemento de mensagem no painel ─── */
+  function createMsgEl(role) {
+    const el = document.createElement('div');
+    el.className = `live-msg live-msg-${role}`;
+    el.innerHTML =
+      `<span class="live-msg-role">${role === 'user' ? 'Você' : 'Gênesis'}</span>` +
+      `<span class="live-msg-text"></span>`;
+    rc.appendChild(el);
+    document.getElementById('reply-area').scrollTop = 99999;
+    return el;
+  }
+
+  /* ─── INICIAR LIVE ─── */
+  async function startLive() {
+    if (liveActive) return;
+
+    /* Para o mic principal se estiver escutando */
+    if (typeof isListening !== 'undefined' && isListening) {
+      if (typeof stopListening === 'function') stopListening(false);
+    }
+
+    liveBtn.classList.add('live-active');
+    liveBtn.title = 'Parar Modo Live';
+    if (typeof openPanel === 'function') openPanel();
+    if (typeof setState  === 'function') setState('thinking');
+
+    rc.innerHTML = '';
+    if (rh) { rh.style.display = 'block'; rh.textContent = 'Conectando ao servidor Live…'; }
+
+    /* Busca chave */
+    let key;
+    try { key = await fetchKey(); }
+    catch (err) {
+      showErr('⚠ ' + err.message);
+      resetBtn();
+      if (typeof setState === 'function') setState('idle');
+      return;
+    }
+
+    /* Abre WebSocket */
+    ws = new WebSocket(`${WS_BASE}?key=${key}`);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({
+        setup: {
+          model: LIVE_MODEL,
+          generation_config: { response_modalities: ['TEXT'] },
+          input_audio_transcription: {},
+          system_instruction: {
+            parts: [{
+              text: 'Você é Gênesis, uma inteligência artificial desenvolvida pela FelpsAi. ' +
+                    'Responda sempre em português brasileiro, de forma natural e conversacional. ' +
+                    'Seja conciso nas respostas.'
+            }]
+          }
+        }
+      }));
+    };
+
+    ws.onmessage = async (ev) => {
+      const raw = ev.data instanceof Blob ? await ev.data.text() : ev.data;
+      let msg;
+      try { msg = JSON.parse(raw); } catch { return; }
+
+      /* ── Setup concluído: inicia captura de áudio ── */
+      if (msg.setupComplete) {
+        liveActive = true;
+        if (rh) rh.style.display = 'none';
+        if (liveDotEl) liveDotEl.classList.add('active');
+        if (footerStat) footerStat.textContent = 'live ativo';
+        if (typeof setState === 'function') setState('idle');
+
+        const hdr = document.createElement('div');
+        hdr.className = 'live-header';
+        hdr.innerHTML = `<span class="material-symbols-outlined">stream</span> Modo Live Ativo — fale agora`;
+        rc.appendChild(hdr);
+
+        try { await startAudio(); }
+        catch (err) {
+          showErr('⚠ Microfone: ' + err.message);
+          stopLive();
+        }
+        return;
+      }
+
+      /* ── Transcrição da voz do usuário ── */
+      const inputTrans = msg.serverContent?.inputTranscription;
+      if (inputTrans?.text) {
+        userText = inputTrans.text;
+        if (!currentUserEl) currentUserEl = createMsgEl('user');
+        currentUserEl.querySelector('.live-msg-text').textContent = userText;
+        document.getElementById('reply-area').scrollTop = 99999;
+      }
+
+      /* ── Resposta textual do modelo (streaming) ── */
+      const parts = msg.serverContent?.modelTurn?.parts;
+      if (parts) {
+        for (const p of parts) {
+          if (!p.text) continue;
+          if (!currentAiEl) {
+            currentAiEl = createMsgEl('ai');
+            if (typeof setState === 'function') setState('responding');
+          }
+          aiText += p.text;
+          currentAiEl.querySelector('.live-msg-text').textContent = aiText;
+          document.getElementById('reply-area').scrollTop = 99999;
+        }
+      }
+
+      /* ── Turno completo ── */
+      if (msg.serverContent?.turnComplete) {
+        if (aiText && typeof saveToHistory === 'function') {
+          saveToHistory(userText || '(voz)', aiText);
+        }
+        currentAiEl   = null;
+        currentUserEl = null;
+        aiText        = '';
+        userText      = '';
+        if (typeof setState === 'function') setState('idle');
+      }
+    };
+
+    ws.onerror = () => { if (liveActive) stopLive(); };
+    ws.onclose = () => { if (liveActive) stopLive(); };
+  }
+
+  /* ─── CAPTURA DE ÁUDIO → PCM 16k ─── */
+  async function startAudio() {
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount:     1,
+        sampleRate:       16000,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl:  true,
+      }
+    });
+
+    audioCtx   = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+    sourceNode = audioCtx.createMediaStreamSource(micStream);
+    processor  = audioCtx.createScriptProcessor(2048, 1, 1);
+
+    processor.onaudioprocess = (ev) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !liveActive) return;
+
+      const f32 = ev.inputBuffer.getChannelData(0);
+      const b64 = ab2b64(f32ToI16(f32).buffer);
+
+      ws.send(JSON.stringify({
+        realtimeInput: {
+          mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: b64 }]
+        }
+      }));
+
+      /* Atualiza volume na esfera neural */
+      let sum = 0;
+      for (let i = 0; i < f32.length; i++) sum += f32[i] * f32[i];
+      audioVolume = Math.min(1, Math.sqrt(sum / f32.length) * 10);
+    };
+
+    sourceNode.connect(processor);
+    processor.connect(audioCtx.destination);
+  }
+
+  /* ─── PARAR LIVE ─── */
+  function stopLive() {
+    liveActive    = false;
+    currentAiEl   = null;
+    currentUserEl = null;
+    aiText        = '';
+    userText      = '';
+
+    const safeDisconnect = (node) => { try { node?.disconnect(); } catch (_) {} };
+    safeDisconnect(processor);  processor  = null;
+    safeDisconnect(sourceNode); sourceNode = null;
+    if (audioCtx)  { try { audioCtx.close(); } catch (_) {} audioCtx = null; }
+    if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+    if (ws)        { try { ws.close();        } catch (_) {} ws       = null; }
+
+    audioVolume = 0; // reseta volume da esfera
+
+    resetBtn();
+    if (liveDotEl)  liveDotEl.classList.remove('active');
+    if (footerStat) footerStat.textContent = 'live encerrado';
+    if (typeof setState === 'function') setState('idle');
+
+    const end = document.createElement('div');
+    end.className = 'live-end-msg';
+    end.textContent = '— sessão encerrada —';
+    rc.appendChild(end);
+    document.getElementById('reply-area').scrollTop = 99999;
+
+    setTimeout(() => {
+      if (footerStat) footerStat.textContent = 'sistema pronto';
+    }, 3000);
+  }
+
+  /* ─── Helpers visuais ─── */
+  function resetBtn() {
+    liveBtn.classList.remove('live-active');
+    liveBtn.title = 'Modo Live — conversação em tempo real';
+  }
+
+  function showErr(msg) {
+    if (rh) { rh.style.display = 'block'; rh.textContent = msg; }
+  }
+
+  /* ─── Bind ─── */
+  liveBtn.addEventListener('click', () => liveActive ? stopLive() : startLive());
+
 })();
 </script>
 </body>
