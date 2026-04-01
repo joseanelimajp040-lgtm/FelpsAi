@@ -3386,7 +3386,7 @@ dlBtn.addEventListener('click', async function () {
      ESPELHA A IMAGEM PENDENTE (sem depender do escopo externo)
      Roda em capture phase → antes do handler original do img-input
   ────────────────────────────────────────────────────────────── */
-  document.getElementById('img-input').addEventListener('change', function () {
+  document.getElementById('file-input').addEventListener('change', function () {
     const file = this.files[0];
     if (!file) return;
     const reader = new FileReader();
