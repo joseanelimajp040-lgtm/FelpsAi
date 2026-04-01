@@ -3835,40 +3835,41 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
       return;
     }
 
-    /* --- INÍCIO DA BUSCA DINÂMICA (A MÁGICA CONTRA OS BUGS DA GOOGLE) --- */
+    /* --- INÍCIO DA BUSCA DINÂMICA (Sem filtro, pegando o melhor modelo) --- */
     if (rh) { rh.textContent = 'Negociando modelo com a Google…'; }
-    let validLiveModel = 'models/gemini-2.0-flash'; // Fallback caso tudo falhe
+    let validLiveModel = 'models/gemini-2.5-flash'; 
     try {
-      // Fazemos a requisição para listar os modelos atuais
       const resModels = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
       const dataModels = await resModels.json();
       
-      // Filtramos automaticamente para achar qual modelo suporta o modo Live hoje
       const liveModel = dataModels.models.find(m => 
         m.supportedGenerationMethods && m.supportedGenerationMethods.includes("bidiGenerateContent")
       );
-      
-      if (liveModel) {
-        validLiveModel = liveModel.name;
-        console.log("🎯 Google exigiu o uso deste modelo:", validLiveModel);
-      }
-    } catch(e) {
-      console.warn("Aviso: Falha na busca dinâmica, tentando fallback.");
-    }
+      if (liveModel) validLiveModel = liveModel.name;
+    } catch(e) {}
     /* --- FIM DA BUSCA DINÂMICA --- */
 
     if (rh) { rh.textContent = 'Conectando ao servidor Live…'; }
 
-    /* Abre WebSocket (Sempre usando v1beta!) */
     const WS_BASE = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
     ws = new WebSocket(`${WS_BASE}?key=${key}`);
 
+    let nextAudioTime = 0; // Controle para os pedaços de áudio não encavalarem
+
     ws.onopen = () => {
-      // Agora enviamos o nome do modelo que a própria Google nos deu!
       ws.send(JSON.stringify({
         setup: {
           model: validLiveModel, 
-          generationConfig: { responseModalities: ['TEXT', 'AUDIO'] },
+          generationConfig: { 
+            responseModalities: ['AUDIO', 'TEXT'], // Pedimos texto E áudio
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: {
+                  voiceName: "Aoede" // Voz feminina e calma da Google
+                }
+              }
+            }
+          },
           systemInstruction: {
             parts: [{
               text: 'Você é Gênesis, uma inteligência artificial desenvolvida pela FelpsAi. ' +
@@ -3879,13 +3880,12 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
         }
       }));
     };
-    
+
     ws.onmessage = async (ev) => {
       const raw = ev.data instanceof Blob ? await ev.data.text() : ev.data;
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
-      /* ── Setup concluído: inicia captura de áudio ── */
       if (msg.setupComplete) {
         liveActive = true;
         if (rh) rh.style.display = 'none';
@@ -3899,12 +3899,100 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
         rc.appendChild(hdr);
 
         try { await startAudio(); }
-        catch (err) {
-          showErr('⚠ Microfone: ' + err.message);
-          stopLive();
-        }
+        catch (err) { showErr('⚠ Microfone: ' + err.message); stopLive(); }
         return;
       }
+
+      /* ── Transcrição da voz do usuário ── */
+      const inputTrans = msg.serverContent?.inputTranscription;
+      if (inputTrans?.text) {
+        userText = inputTrans.text;
+        if (!currentUserEl) currentUserEl = createMsgEl('user');
+        currentUserEl.querySelector('.live-msg-text').textContent = userText;
+        document.getElementById('reply-area').scrollTop = 99999;
+      }
+
+      /* ── Resposta do modelo (Texto E Áudio) ── */
+      const parts = msg.serverContent?.modelTurn?.parts;
+      if (parts) {
+        for (const p of parts) {
+          // 1. Processa o Texto para a tela
+          if (p.text) {
+            if (!currentAiEl) {
+              currentAiEl = createMsgEl('ai');
+              if (typeof setState === 'function') setState('responding');
+            }
+            aiText += p.text;
+            currentAiEl.querySelector('.live-msg-text').textContent = aiText;
+            document.getElementById('reply-area').scrollTop = 99999;
+          }
+          
+          // 2. Processa os bytes de Áudio para a caixa de som
+          if (p.inlineData && p.inlineData.data) {
+            playLiveAudio(p.inlineData.data);
+          }
+        }
+      }
+
+      /* ── Turno completo ── */
+      if (msg.serverContent?.turnComplete) {
+        if (aiText && typeof saveToHistory === 'function') saveToHistory(userText || '(voz)', aiText);
+        currentAiEl   = null;
+        currentUserEl = null;
+        aiText        = '';
+        userText      = '';
+        if (typeof setState === 'function') setState('idle');
+      }
+    };
+
+    ws.onerror = () => { if (liveActive) stopLive(); };
+    ws.onclose = (ev) => {
+      console.error("WebSocket Fechado! Código:", ev.code, "Motivo:", ev.reason);
+      if (liveActive) {
+        stopLive();
+      } else {
+        resetBtn();
+        if (typeof setState === 'function') setState('idle');
+        document.getElementById('send-btn').disabled = false;
+        const rh = document.getElementById('reply-hint');
+        if (rh) { rh.style.display = 'block'; rh.textContent = '⚠ Falha ao conectar. Erro: ' + ev.code; }
+      }
+    };
+  }
+
+  /* ─── FUNÇÃO NOVA: Decodifica e toca o áudio da API ─── */
+  function playLiveAudio(base64Str) {
+    if (!audioCtx) return;
+    
+    // Converte Base64 para binário
+    const binaryStr = atob(base64Str);
+    const len = binaryStr.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+    
+    // Converte PCM 16-bit para o formato Float32 do Web Audio API
+    const int16 = new Int16Array(bytes.buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) {
+      float32[i] = int16[i] / 32768.0;
+    }
+
+    // Cria o buffer (Google envia áudio a 24kHz)
+    const buffer = audioCtx.createBuffer(1, float32.length, 24000);
+    buffer.getChannelData(0).set(float32);
+    
+    // Cria o player
+    const source = audioCtx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioCtx.destination);
+    
+    // Fila de reprodução (para a voz não gaguejar ou encavalar)
+    const currentTime = audioCtx.currentTime;
+    if (nextAudioTime < currentTime) nextAudioTime = currentTime;
+    
+    source.start(nextAudioTime);
+    nextAudioTime += buffer.duration;
+  }
 
       /* ── Transcrição da voz do usuário ── */
       const inputTrans = msg.serverContent?.inputTranscription;
