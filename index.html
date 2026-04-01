@@ -3748,7 +3748,7 @@ dlBtn.addEventListener('click', async function () {
 (function () {
   'use strict';
 
-const LIVE_MODEL = 'models/gemini-2.0-flash-live-001'; 
+const LIVE_MODEL = 'models/gemini-2.0-flash';
 const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
   
   let ws            = null;
@@ -3919,9 +3919,11 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
 
     ws.onerror = () => { if (liveActive) stopLive(); };
     ws.onclose = () => {
-  if (liveActive) {
-    stopLive();
-  } else {
+    console.error("WebSocket Fechado! Código:", ev.code, "Motivo:", ev.reason);
+      
+      if (liveActive) {
+        stopLive();
+      } else {
     // Conexão rejeitada antes do setup completar
     resetBtn();
     if (typeof setState === 'function') setState('idle');
