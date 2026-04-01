@@ -3748,9 +3748,9 @@ dlBtn.addEventListener('click', async function () {
 (function () {
   'use strict';
 
-const LIVE_MODEL = 'models/gemini-3.1-flash-live-preview'; 
+const LIVE_MODEL = 'models/gemini-2.0-flash-exp'; 
 const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
-
+  
   let ws            = null;
   let liveActive    = false;
   let audioCtx      = null;
@@ -3843,7 +3843,6 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
         setup: {
           model: LIVE_MODEL,
           generationConfig: { responseModalities: ['TEXT'] },
-          inputAudioTranscription: { model: LIVE_MODEL },
           systemInstruction: {
             parts: [{
               text: 'Você é Gênesis, uma inteligência artificial desenvolvida pela FelpsAi. ' +
