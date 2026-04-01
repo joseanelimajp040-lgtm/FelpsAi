@@ -3918,12 +3918,13 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
     };
 
     ws.onerror = () => { if (liveActive) stopLive(); };
-    ws.onclose = (ev) => {
-    console.error("WebSocket Fechado! Código:", ev.code, "Motivo:", ev.reason);
     
-    if (liveActive) {
+    ws.onclose = (ev) => {
+      console.error("WebSocket Fechado! Código:", ev.code, "Motivo:", ev.reason);
+      
+      if (liveActive) {
         stopLive();
-    } else {
+      } else {
         // Conexão rejeitada antes do setup completar
         resetBtn();
         if (typeof setState === 'function') setState('idle');
@@ -3933,8 +3934,9 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
             rh.style.display = 'block'; 
             rh.textContent = '⚠ Falha ao conectar. Código de erro: ' + ev.code; 
         }
-    }
-};
+      }
+    };
+  }
 
   /* ─── CAPTURA DE ÁUDIO → PCM 16k ─── */
   async function startAudio() {
