@@ -3748,8 +3748,8 @@ dlBtn.addEventListener('click', async function () {
 (function () {
   'use strict';
 
-  const LIVE_MODEL = 'models/gemini-2.0-flash-exp';
-  const WS_BASE    = 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.BidiGenerateContent';
+const LIVE_MODEL = 'models/gemini-2.0-flash-exp';
+const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.BidiGenerateContent/${LIVE_MODEL}`;
 
   let ws            = null;
   let liveActive    = false;
