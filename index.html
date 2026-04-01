@@ -4020,8 +4020,22 @@ dlBtn.addEventListener('click', async function () {
       }
     };
 
-    ws.onerror = () => { showErr('⚠ Erro na conexão WebSocket.'); stopLive(); };
-    ws.onclose = () => { if (liveActive) stopLive(); };
+    ws.onerror = () => {
+  showErr('⚠ Erro na conexão WebSocket.');
+  if (liveActive) stopLive();
+  else { resetBtn(); if (typeof setState === 'function') setState('idle'); }
+};
+    ws.onclose = () => {
+  if (liveActive) {
+    stopLive();
+  } else {
+    // Falhou antes do setupComplete
+    showErr('⚠ Conexão encerrada. Verifique a chave da API.');
+    resetBtn();
+    if (typeof setState === 'function') setState('idle');
+    if (liveDotEl) liveDotEl.classList.remove('active');
+  }
+};
   }
 
   /* ─── Bind do botão ─── */
