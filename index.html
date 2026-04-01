@@ -3835,13 +3835,49 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
       return;
     }
 
-    /* Abre WebSocket */
+    /* Busca chave */
+    let key;
+    try { key = await fetchKey(); }
+    catch (err) {
+      showErr('⚠ ' + err.message);
+      resetBtn();
+      if (typeof setState === 'function') setState('idle');
+      return;
+    }
+
+    /* --- INÍCIO DA BUSCA DINÂMICA (A MÁGICA CONTRA OS BUGS DA GOOGLE) --- */
+    if (rh) { rh.textContent = 'Negociando modelo com a Google…'; }
+    let validLiveModel = 'models/gemini-2.0-flash'; // Fallback caso tudo falhe
+    try {
+      // Fazemos a requisição para listar os modelos atuais
+      const resModels = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+      const dataModels = await resModels.json();
+      
+      // Filtramos automaticamente para achar qual modelo suporta o modo Live hoje
+      const liveModel = dataModels.models.find(m => 
+        m.supportedGenerationMethods && m.supportedGenerationMethods.includes("bidiGenerateContent")
+      );
+      
+      if (liveModel) {
+        validLiveModel = liveModel.name;
+        console.log("🎯 Google exigiu o uso deste modelo:", validLiveModel);
+      }
+    } catch(e) {
+      console.warn("Aviso: Falha na busca dinâmica, tentando fallback.");
+    }
+    /* --- FIM DA BUSCA DINÂMICA --- */
+
+    if (rh) { rh.textContent = 'Conectando ao servidor Live…'; }
+
+    /* Abre WebSocket (Sempre usando v1beta!) */
+    const WS_BASE = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent`;
     ws = new WebSocket(`${WS_BASE}?key=${key}`);
 
     ws.onopen = () => {
+      // Agora enviamos o nome do modelo que a própria Google nos deu!
       ws.send(JSON.stringify({
         setup: {
-          model: LIVE_MODEL,
+          model: validLiveModel, 
           generationConfig: { responseModalities: ['TEXT'] },
           systemInstruction: {
             parts: [{
@@ -3853,7 +3889,7 @@ const WS_BASE    = `wss://generativelanguage.googleapis.com/ws/google.ai.generat
         }
       }));
     };
-
+    
     ws.onmessage = async (ev) => {
       const raw = ev.data instanceof Blob ? await ev.data.text() : ev.data;
       let msg;
