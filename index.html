@@ -3959,11 +3959,26 @@ dlBtn.addEventListener('click', async function () {
                       description: "O prompt detalhado descrevendo a imagem que deve ser gerada (em português ou inglês)."
                     }
                   },
-                  required: ["prompt"]
-                }
-              }]
+                 required: ["prompt"]
+              }
+            },
+            {
+              name: "abrir_site",
+              description: "Abre um site ou aplicativo da web solicitado pelo usuário (ex: YouTube, TikTok, Google).",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  site: {
+                    type: "STRING",
+                    description: "O nome do site ou plataforma que o usuário deseja abrir."
+                  }
+                },
+                required: ["site"]
+              }
             }
-          ],
+          ]
+        }
+      ],
           generationConfig: {
             responseModalities: ['AUDIO'], 
             speechConfig: {
@@ -4046,6 +4061,58 @@ REGRAS DE TRATAMENTO:
                 }
               }));
             }
+          const callSite = calls.find(c => c.name === 'abrir_site');
+
+if (callSite) {
+  const siteParam = callSite.args.site;
+  const callId = callSite.id;
+  
+  if (rh) { rh.style.display = 'block'; rh.textContent = `Localizando ${siteParam}...`; }
+
+  try {
+    // Usa a sua função existente para detectar a URL no SITE_MAP
+    // Fingimos que o usuário digitou "abra [site]" para reaproveitar a lógica
+    let targetUrl = detectLaunchCommand(`abra ${siteParam}`);
+    
+    // Fallback: se não estiver no SITE_MAP, faz uma busca no Google
+    if (!targetUrl) {
+      targetUrl = `https://www.google.com/search?q=${encodeURIComponent(siteParam)}`;
+    }
+
+    // Usa a sua função visual que já cria o card e abre a aba em 600ms
+    if (typeof renderLaunchReply === 'function') {
+      renderLaunchReply(siteParam, targetUrl);
+    } else {
+      window.open(targetUrl, '_blank', 'noopener');
+    }
+
+    // Devolve a confirmação para a IA poder falar "Pronto, abrindo o site!"
+    ws.send(JSON.stringify({
+      toolResponse: {
+        functionResponses: [{
+          id: callId,
+          name: "abrir_site",
+          response: { 
+            result: "success", 
+            status: `O site ${siteParam} foi aberto com sucesso em uma nova aba para o usuário.` 
+          }
+        }]
+      }
+    }));
+
+  } catch (err) {
+    // Em caso de erro (ex: bloqueio de pop-up), avisa a IA
+    ws.send(JSON.stringify({
+      toolResponse: {
+        functionResponses: [{
+          id: callId,
+          name: "abrir_site",
+          response: { result: "error", reason: err.message }
+        }]
+      }
+    }));
+  }
+}
           }
         }
         return; // Sai da função para não processar esse frame como texto
