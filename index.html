@@ -2118,10 +2118,6 @@ function renderLaunchReply(siteName, url) {
     if (btn) btn.click();
   }, 400);
 }
-
-  // Abre automaticamente após 600ms
-  setTimeout(() => window.open(url, '_blank', 'noopener'), 600);
-}
   
 sendBtn.addEventListener('click', async () => {
   const txt = msgInput.value.trim();
