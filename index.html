@@ -3993,69 +3993,64 @@ REGRAS DE TRATAMENTO:
       const raw = ev.data instanceof Blob ? await ev.data.text() : ev.data;
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
-      /* ─── INTERCEPTA CHAMADAS DE FUNÇÃO (FUNCTION CALLING) ─── */
-      const functionCallPart = msg.serverContent?.modelTurn?.parts?.find(p => p.functionCall);
-      if (functionCallPart) {
-        const call = functionCallPart.functionCall;
+
+      /* ─── INTERCEPTA CHAMADAS DE FUNÇÃO (FUNCTION CALLING) NO LIVE MODE ─── */
+      if (msg.toolCall) {
+        const calls = msg.toolCall.functionCalls;
         
-        if (call.name === 'gerar_imagem') {
-          const prompt = call.args.prompt;
+        if (calls && calls.length > 0) {
+          const call = calls.find(c => c.name === 'gerar_imagem');
           
-          if (rh) { rh.style.display = 'block'; rh.textContent = 'Gerando imagem...'; }
-          
-          try {
-            // Chama a mesma rota que você já usa no modo texto
-            const resImg = await fetch('/.netlify/functions/imagegen', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ prompt })
-            });
-            const dataImg = await resImg.json();
+          if (call) {
+            const prompt = call.args.prompt;
+            const callId = call.id; // Precisamos do ID para responder à IA
+            
+            if (rh) { rh.style.display = 'block'; rh.textContent = 'Gerando imagem...'; }
+            
+            try {
+              // Dispara a requisição para o seu backend
+              const resImg = await fetch('/.netlify/functions/imagegen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+              });
+              const dataImg = await resImg.json();
 
-            if (!resImg.ok || dataImg.error) throw new Error(dataImg.error || 'Erro na geração');
+              if (!resImg.ok || dataImg.error) throw new Error(dataImg.error || 'Erro na geração');
 
-            // Renderiza na gaveta usando a sua função já existente
-            if (typeof renderImageReply === 'function') {
-              renderImageReply(dataImg.imageBase64, dataImg.mimeType || 'image/png');
+              // Exibe a imagem na gaveta usando sua função original
+              if (typeof renderImageReply === 'function') {
+                renderImageReply(dataImg.imageBase64, dataImg.mimeType || 'image/png');
+              }
+
+              // Devolve a confirmação para a Gênesis no formato correto (ToolResponse)
+              ws.send(JSON.stringify({
+                toolResponse: {
+                  functionResponses: [{
+                    id: callId,
+                    name: "gerar_imagem",
+                    response: { result: "success", status: "A imagem foi gerada e está na tela do usuário." }
+                  }]
+                }
+              }));
+
+            } catch (err) {
+              // Se der erro, avisa a Gênesis para ela te falar no áudio
+              ws.send(JSON.stringify({
+                toolResponse: {
+                  functionResponses: [{
+                    id: callId,
+                    name: "gerar_imagem",
+                    response: { result: "error", reason: err.message }
+                  }]
+                }
+              }));
             }
-
-            // Avisa a Gênesis que a imagem foi gerada com sucesso para ela continuar a conversa
-            ws.send(JSON.stringify({
-              clientContent: {
-                turns: [{
-                  role: "user",
-                  parts: [{
-                    functionResponse: {
-                      name: "gerar_imagem",
-                      response: { result: "success", message: "A imagem foi gerada e está aparecendo na tela agora." }
-                    }
-                  }]
-                }],
-                turnComplete: true
-              }
-            }));
-
-          } catch (err) {
-            // Avisa a Gênesis que deu erro, para ela te avisar pela voz
-            ws.send(JSON.stringify({
-              clientContent: {
-                turns: [{
-                  role: "user",
-                  parts: [{
-                    functionResponse: {
-                      name: "gerar_imagem",
-                      response: { result: "error", error: err.message }
-                    }
-                  }]
-                }],
-                turnComplete: true
-              }
-            }));
           }
         }
-        return; // Interrompe o processamento deste frame, pois era só uma função
+        return; // Sai da função para não processar esse frame como texto
       }
-
+      
       if (msg.setupComplete) {
         liveActive = true;
         if (rh) rh.style.display = 'none';
