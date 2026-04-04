@@ -1768,6 +1768,7 @@ REGRAS DE TRATAMENTO:
 4. Você DEVE conversar e responder EXCLUSIVAMENTE em Português do Brasil (pt-BR).
 5. NUNCA imprima pensamentos internos, intenções ou ações entre asteriscos.
 6. Fale de forma natural, direta e conversacional — como uma IA sofisticada e confiante, não como uma assistente genérica.`
+7. AÇÃO OBRIGATÓRIA: Quando o usuário pedir para abrir um site, execute a ferramenta \`abrir_site\`. Após receber a confirmação de sucesso da ferramenta, responda verbalmente de forma curta, natural e sempre variada confirmando a ação (ex: "É pra já, chefe.", "Abrindo o YouTube agora mesmo.", "Colocando na tela, pai."). NUNCA escreva textos de log ou intenções em inglês.`
   }]
 },
   contents: conversationHistory,
@@ -2091,7 +2092,7 @@ function renderLaunchReply(siteName, url) {
       <div style="font-size:14px;font-weight:600;color:rgba(230,245,255,.9);margin-bottom:3px">${siteName}</div>
       <div style="font-size:11px;font-family:'Space Mono',monospace;color:rgba(93,216,192,.55)">${url}</div>
     </div>
-    <a href="${url}" target="_blank" rel="noopener" style="
+    <a id="auto-launch-btn" href="${url}" target="_blank" rel="noopener" style="
       padding:9px 18px;border-radius:10px;
       background:var(--accent);color:#03050a;
       font-size:12px;font-weight:600;font-family:'Inter',sans-serif;
@@ -2110,6 +2111,13 @@ function renderLaunchReply(siteName, url) {
 
   liveDotEl.classList.remove('active');
   footerStatus.textContent = 'site localizado';
+
+  // Tentativa de burlar o bloqueador de pop-ups com um clique programático
+  setTimeout(() => {
+    const btn = document.getElementById('auto-launch-btn');
+    if (btn) btn.click();
+  }, 400);
+}
 
   // Abre automaticamente após 600ms
   setTimeout(() => window.open(url, '_blank', 'noopener'), 600);
@@ -4038,13 +4046,16 @@ REGRAS DE TRATAMENTO:
                 renderImageReply(dataImg.imageBase64, dataImg.mimeType || 'image/png');
               }
 
-              // Devolve a confirmação para a Gênesis no formato correto (ToolResponse)
+              // Devolve a confirmação instruindo a IA que o botão está na tela E que ela deve falar
               ws.send(JSON.stringify({
                 toolResponse: {
                   functionResponses: [{
                     id: callId,
-                    name: "gerar_imagem",
-                    response: { result: "success", status: "A imagem foi gerada e está na tela do usuário." }
+                    name: "abrir_site",
+                    response: { 
+                      result: "success", 
+                      status: `O site ${siteParam} foi aberto/processado na tela do usuário. Agora, fale uma frase curta e carismática confirmando que você executou a ordem.` 
+                    }
                   }]
                 }
               }));
@@ -4063,56 +4074,56 @@ REGRAS DE TRATAMENTO:
             }
           const callSite = calls.find(c => c.name === 'abrir_site');
 
-if (callSite) {
-  const siteParam = callSite.args.site;
-  const callId = callSite.id;
-  
-  if (rh) { rh.style.display = 'block'; rh.textContent = `Localizando ${siteParam}...`; }
+          if (callSite) {
+            const siteParam = callSite.args.site;
+            const callId = callSite.id;
+            
+            if (rh) { rh.style.display = 'block'; rh.textContent = `Localizando ${siteParam}...`; }
 
-  try {
-    // Usa a sua função existente para detectar a URL no SITE_MAP
-    // Fingimos que o usuário digitou "abra [site]" para reaproveitar a lógica
-    let targetUrl = detectLaunchCommand(`abra ${siteParam}`);
-    
-    // Fallback: se não estiver no SITE_MAP, faz uma busca no Google
-    if (!targetUrl) {
-      targetUrl = `https://www.google.com/search?q=${encodeURIComponent(siteParam)}`;
-    }
+            try {
+              let targetUrl = detectLaunchCommand(`abra ${siteParam}`);
+              
+              // Fallback caso o site digitado pela IA não esteja no seu SITE_MAP
+              if (!targetUrl) {
+                if (siteParam.startsWith('http')) {
+                  targetUrl = siteParam;
+                } else {
+                  targetUrl = `https://www.google.com/search?q=${encodeURIComponent(siteParam)}`;
+                }
+              }
 
-    // Usa a sua função visual que já cria o card e abre a aba em 600ms
-    if (typeof renderLaunchReply === 'function') {
-      renderLaunchReply(siteParam, targetUrl);
-    } else {
-      window.open(targetUrl, '_blank', 'noopener');
-    }
+              if (typeof renderLaunchReply === 'function') {
+                renderLaunchReply(siteParam, targetUrl);
+              } else {
+                window.open(targetUrl, '_blank', 'noopener');
+              }
 
-    // Devolve a confirmação para a IA poder falar "Pronto, abrindo o site!"
-    ws.send(JSON.stringify({
-      toolResponse: {
-        functionResponses: [{
-          id: callId,
-          name: "abrir_site",
-          response: { 
-            result: "success", 
-            status: `O site ${siteParam} foi aberto com sucesso em uma nova aba para o usuário.` 
+              // Devolve a confirmação instruindo a IA que o botão está na tela
+              ws.send(JSON.stringify({
+                toolResponse: {
+                  functionResponses: [{
+                    id: callId,
+                    name: "abrir_site",
+                    response: { 
+                      result: "success", 
+                      status: `O site ${siteParam} foi processado. O botão de abrir está na tela do usuário caso o navegador bloqueie a abertura automática.` 
+                    }
+                  }]
+                }
+              }));
+
+            } catch (err) {
+              ws.send(JSON.stringify({
+                toolResponse: {
+                  functionResponses: [{
+                    id: callId,
+                    name: "abrir_site",
+                    response: { result: "error", reason: err.message }
+                  }]
+                }
+              }));
+            }
           }
-        }]
-      }
-    }));
-
-  } catch (err) {
-    // Em caso de erro (ex: bloqueio de pop-up), avisa a IA
-    ws.send(JSON.stringify({
-      toolResponse: {
-        functionResponses: [{
-          id: callId,
-          name: "abrir_site",
-          response: { result: "error", reason: err.message }
-        }]
-      }
-    }));
-  }
-}
           }
         }
         return; // Sai da função para não processar esse frame como texto
