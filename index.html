@@ -3945,7 +3945,25 @@ dlBtn.addEventListener('click', async function () {
       ws.send(JSON.stringify({
         setup: {
           model: validLiveModel,
-          tools: [{ googleSearch: {} }],
+          tools: [
+            { googleSearch: {} },
+            {
+              functionDeclarations: [{
+                name: "gerar_imagem",
+                description: "Gera uma imagem baseada no pedido do usuário e exibe na interface.",
+                parameters: {
+                  type: "OBJECT",
+                  properties: {
+                    prompt: {
+                      type: "STRING",
+                      description: "O prompt detalhado descrevendo a imagem que deve ser gerada (em português ou inglês)."
+                    }
+                  },
+                  required: ["prompt"]
+                }
+              }]
+            }
+          ],
           generationConfig: {
             responseModalities: ['AUDIO'], 
             speechConfig: {
@@ -3975,6 +3993,68 @@ REGRAS DE TRATAMENTO:
       const raw = ev.data instanceof Blob ? await ev.data.text() : ev.data;
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
+      /* ─── INTERCEPTA CHAMADAS DE FUNÇÃO (FUNCTION CALLING) ─── */
+      const functionCallPart = msg.serverContent?.modelTurn?.parts?.find(p => p.functionCall);
+      if (functionCallPart) {
+        const call = functionCallPart.functionCall;
+        
+        if (call.name === 'gerar_imagem') {
+          const prompt = call.args.prompt;
+          
+          if (rh) { rh.style.display = 'block'; rh.textContent = 'Gerando imagem...'; }
+          
+          try {
+            // Chama a mesma rota que você já usa no modo texto
+            const resImg = await fetch('/.netlify/functions/imagegen', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt })
+            });
+            const dataImg = await resImg.json();
+
+            if (!resImg.ok || dataImg.error) throw new Error(dataImg.error || 'Erro na geração');
+
+            // Renderiza na gaveta usando a sua função já existente
+            if (typeof renderImageReply === 'function') {
+              renderImageReply(dataImg.imageBase64, dataImg.mimeType || 'image/png');
+            }
+
+            // Avisa a Gênesis que a imagem foi gerada com sucesso para ela continuar a conversa
+            ws.send(JSON.stringify({
+              clientContent: {
+                turns: [{
+                  role: "user",
+                  parts: [{
+                    functionResponse: {
+                      name: "gerar_imagem",
+                      response: { result: "success", message: "A imagem foi gerada e está aparecendo na tela agora." }
+                    }
+                  }]
+                }],
+                turnComplete: true
+              }
+            }));
+
+          } catch (err) {
+            // Avisa a Gênesis que deu erro, para ela te avisar pela voz
+            ws.send(JSON.stringify({
+              clientContent: {
+                turns: [{
+                  role: "user",
+                  parts: [{
+                    functionResponse: {
+                      name: "gerar_imagem",
+                      response: { result: "error", error: err.message }
+                    }
+                  }]
+                }],
+                turnComplete: true
+              }
+            }));
+          }
+        }
+        return; // Interrompe o processamento deste frame, pois era só uma função
+      }
 
       if (msg.setupComplete) {
         liveActive = true;
