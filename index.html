@@ -4019,58 +4019,45 @@ REGRAS DE TRATAMENTO:
         const calls = msg.toolCall.functionCalls;
         
         if (calls && calls.length > 0) {
-          const call = calls.find(c => c.name === 'gerar_imagem');
           
+          // 1. Ferramenta de Imagem
+          const call = calls.find(c => c.name === 'gerar_imagem');
           if (call) {
             const prompt = call.args.prompt;
-            const callId = call.id; // Precisamos do ID para responder à IA
-            
+            const callId = call.id; 
             if (rh) { rh.style.display = 'block'; rh.textContent = 'Gerando imagem...'; }
             
             try {
-              // Dispara a requisição para o seu backend
               const resImg = await fetch('/.netlify/functions/imagegen', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt })
               });
               const dataImg = await resImg.json();
-
               if (!resImg.ok || dataImg.error) throw new Error(dataImg.error || 'Erro na geração');
 
-              // Exibe a imagem na gaveta usando sua função original
-              if (typeof renderImageReply === 'function') {
-                renderImageReply(dataImg.imageBase64, dataImg.mimeType || 'image/png');
-              }
+              if (typeof renderImageReply === 'function') renderImageReply(dataImg.imageBase64, dataImg.mimeType || 'image/png');
 
-              // Devolve a confirmação instruindo a IA que o botão está na tela E que ela deve falar
-              ws.send(JSON.stringify({
-                toolResponse: {
-                  functionResponses: [{
-                    id: callId,
-                    name: "abrir_site",
-                    response: { 
-                      result: "success", 
-                      status: `O site ${siteParam} foi aberto/processado na tela do usuário. Agora, fale uma frase curta e carismática confirmando que você executou a ordem.` 
-                    }
-                  }]
-                }
-              }));
-
-            } catch (err) {
-              // Se der erro, avisa a Gênesis para ela te falar no áudio
               ws.send(JSON.stringify({
                 toolResponse: {
                   functionResponses: [{
                     id: callId,
                     name: "gerar_imagem",
-                    response: { result: "error", reason: err.message }
+                    response: { result: "success", status: "A imagem foi gerada e exibida." }
                   }]
                 }
               }));
+            } catch (err) {
+              ws.send(JSON.stringify({
+                toolResponse: {
+                  functionResponses: [{ id: callId, name: "gerar_imagem", response: { result: "error", reason: err.message } }]
+                }
+              }));
             }
-          const callSite = calls.find(c => c.name === 'abrir_site');
+          } // <--- ESTA ERA A CHAVE QUE FALTAVA NO SEU CÓDIGO!
 
+          // 2. Ferramenta de Abrir Site
+          const callSite = calls.find(c => c.name === 'abrir_site');
           if (callSite) {
             const siteParam = callSite.args.site;
             const callId = callSite.id;
@@ -4079,14 +4066,8 @@ REGRAS DE TRATAMENTO:
 
             try {
               let targetUrl = detectLaunchCommand(`abra ${siteParam}`);
-              
-              // Fallback caso o site digitado pela IA não esteja no seu SITE_MAP
               if (!targetUrl) {
-                if (siteParam.startsWith('http')) {
-                  targetUrl = siteParam;
-                } else {
-                  targetUrl = `https://www.google.com/search?q=${encodeURIComponent(siteParam)}`;
-                }
+                targetUrl = siteParam.startsWith('http') ? siteParam : `https://www.google.com/search?q=${encodeURIComponent(siteParam)}`;
               }
 
               if (typeof renderLaunchReply === 'function') {
@@ -4095,7 +4076,7 @@ REGRAS DE TRATAMENTO:
                 window.open(targetUrl, '_blank', 'noopener');
               }
 
-              // Devolve a confirmação instruindo a IA que o botão está na tela
+              // Devolve a confirmação instruindo a IA a FALAR com você!
               ws.send(JSON.stringify({
                 toolResponse: {
                   functionResponses: [{
@@ -4103,7 +4084,7 @@ REGRAS DE TRATAMENTO:
                     name: "abrir_site",
                     response: { 
                       result: "success", 
-                      status: `O site ${siteParam} foi processado. O botão de abrir está na tela do usuário caso o navegador bloqueie a abertura automática.` 
+                      status: `O site ${siteParam} foi processado e aberto na tela do usuário. Agora, fale uma frase curta e carismática confirmando que você executou a ordem (ex: 'É pra já, chefe', 'Abrindo o YouTube').` 
                     }
                   }]
                 }
@@ -4112,15 +4093,10 @@ REGRAS DE TRATAMENTO:
             } catch (err) {
               ws.send(JSON.stringify({
                 toolResponse: {
-                  functionResponses: [{
-                    id: callId,
-                    name: "abrir_site",
-                    response: { result: "error", reason: err.message }
-                  }]
+                  functionResponses: [{ id: callId, name: "abrir_site", response: { result: "error", reason: err.message } }]
                 }
               }));
             }
-          }
           }
         }
         return; // Sai da função para não processar esse frame como texto
