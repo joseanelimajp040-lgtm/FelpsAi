@@ -2112,11 +2112,17 @@ function renderLaunchReply(siteName, url) {
   liveDotEl.classList.remove('active');
   footerStatus.textContent = 'site localizado';
 
-  // Tentativa de burlar o bloqueador de pop-ups com um clique programático
+  // O comando de abertura automática:
   setTimeout(() => {
-    const btn = document.getElementById('auto-launch-btn');
-    if (btn) btn.click();
-  }, 400);
+    const novaAba = window.open(url, '_blank', 'noopener');
+    
+    // Verifica se o navegador bloqueou a abertura mágica
+    if (!novaAba || novaAba.closed || typeof novaAba.closed == 'undefined') {
+      replyHint.style.display = 'block';
+      replyHint.textContent = '⚠ Pop-up bloqueado pelo navegador. Permita nas configurações ou clique em "Abrir".';
+      replyHint.style.color = '#ff8080';
+    }
+  }, 100);
 }
   
 sendBtn.addEventListener('click', async () => {
