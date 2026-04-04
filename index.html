@@ -1771,7 +1771,7 @@ REGRAS DE TRATAMENTO:
   }]
 },
   contents: conversationHistory,
-  generationConfig: { maxOutputTokens: 8192 }
+  generationConfig: { maxOutputTokens: 8192 },
   tools: [{ googleSearch: {} }]
 })
 });
@@ -3945,7 +3945,7 @@ dlBtn.addEventListener('click', async function () {
       ws.send(JSON.stringify({
         setup: {
           model: validLiveModel,
-          tools: [{ googleSearch: {} }]
+          tools: [{ googleSearch: {} }],
           generationConfig: {
             responseModalities: ['AUDIO'], 
             speechConfig: {
