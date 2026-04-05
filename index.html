@@ -4142,14 +4142,14 @@ REGRAS DE TRATAMENTO:
             }
           } // <--- ESTA ERA A CHAVE QUE FALTAVA NO SEU CÓDIGO!
 
-   // 2. Ferramenta de Abrir Site
+  // 2. Ferramenta de Abrir Site
           const callSite = calls.find(c => c.name === 'abrir_site');
           if (callSite) {
             const siteParam = callSite.args.site;
             const pesquisaParam = callSite.args.pesquisa; // Captura o que a IA decidiu pesquisar
             const callId = callSite.id;
             
-            let msgTela = pesquisaParam ? `Pesquisando "${pesquisaParam}" no ${siteParam}...` : `Localizando ${siteParam}...`;
+            let msgTela = pesquisaParam ? `Sintonizando "${pesquisaParam}" no ${siteParam}...` : `Localizando ${siteParam}...`;
             if (rh) { rh.style.display = 'block'; rh.textContent = msgTela; }
 
             try {
@@ -4157,18 +4157,25 @@ REGRAS DE TRATAMENTO:
               let foundSiteKey = Object.keys(SITE_MAP).find(k => k.includes(siteParam.toLowerCase()) || siteParam.toLowerCase().includes(k));
 
               if (foundSiteKey) {
-                  // Se o site existe no mapa e a IA mandou algo pra pesquisar
                   if (pesquisaParam && SEARCH_MAP[foundSiteKey]) {
-                      targetUrl = SEARCH_MAP[foundSiteKey] + encodeURIComponent(pesquisaParam);
+                      
+                      // 🔥 A MÁGICA CORRIGIDA: DuckDuckGo "!ducky" (I'm feeling lucky via URL)
+                      if (foundSiteKey === 'youtube' || foundSiteKey === 'spotify') {
+                          // O comando !ducky força o redirecionamento imediato para o 1º resultado
+                          const magicQuery = `!ducky ${pesquisaParam} site:${foundSiteKey}.com`;
+                          targetUrl = `https://duckduckgo.com/?q=${encodeURIComponent(magicQuery)}`;
+                      } else {
+                          targetUrl = SEARCH_MAP[foundSiteKey] + encodeURIComponent(pesquisaParam);
+                      }
+                      
                   } else {
                       targetUrl = SITE_MAP[foundSiteKey];
                   }
               } else {
-                  // Fallback: se for uma URL solta ou pesquisa genérica no Google
                   targetUrl = siteParam.startsWith('http') ? siteParam : `https://www.google.com/search?q=${encodeURIComponent(siteParam + (pesquisaParam ? ' ' + pesquisaParam : ''))}`;
               }
 
-              let displaySiteName = siteParam + (pesquisaParam ? ` (Pesquisa: ${pesquisaParam})` : '');
+              let displaySiteName = siteParam + (pesquisaParam ? ` (Tocando: ${pesquisaParam})` : '');
 
               if (typeof renderLaunchReply === 'function') {
                 renderLaunchReply(displaySiteName, targetUrl);
@@ -4177,8 +4184,8 @@ REGRAS DE TRATAMENTO:
               }
 
               let statusVoice = pesquisaParam
-                 ? `A pesquisa por '${pesquisaParam}' no ${siteParam} foi processada e aberta na tela. Confirme a ação com uma frase curta e carismática.`
-                 : `O site ${siteParam} foi aberto na tela. Confirme a ação com uma frase curta e carismática.`;
+                 ? `A mídia '${pesquisaParam}' foi processada e está a abrir direto. Confirma a ação com uma frase curta e carismática.`
+                 : `O site ${siteParam} foi aberto na tela. Confirma a ação com uma frase curta e carismática.`;
 
               ws.send(JSON.stringify({
                 toolResponse: {
