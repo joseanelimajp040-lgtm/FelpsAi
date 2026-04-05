@@ -2052,10 +2052,12 @@ const SEARCH_MAP = {
 function detectLaunchCommand(text) {
   const t = text.toLowerCase().trim();
 
-  // Padrão 1: "toca/pesquisa/procura [termo] no [site]"
-  const searchPattern = /^(?:tocar?|pesquisar?|procurar?|buscar?)\s+(.+?)\s+(?:no|na|em|pelo)\s+(.+)$/i;
-  // Padrão 2: "abre [site] e (toca|pesquisa) [termo]"
-  const openAndSearchPattern = /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+?)\s+e\s+(?:tocar?|pesquisar?|procurar?|buscar?)\s+(?:por\s+)?(.+)$/i;
+  // 1. Identifica se a intenção é TOCAR (play) em vez de apenas PESQUISAR
+  const isPlayIntent = /\b(toca|tocar|ouvir|play)\b/.test(t);
+
+  // 2. Padrões atualizados para garantir que capturam "ouvir" e "play"
+  const searchPattern = /^(?:tocar?|ouvir|play|pesquisar?|procurar?|buscar?)\s+(.+?)\s+(?:no|na|em|pelo)\s+(.+)$/i;
+  const openAndSearchPattern = /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+?)\s+e\s+(?:tocar?|ouvir|play|pesquisar?|procurar?|buscar?)\s+(?:por\s+)?(.+)$/i;
 
   const simplePatterns = [
     /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+)$/i,
@@ -2066,7 +2068,7 @@ function detectLaunchCommand(text) {
   let targetSite = null;
   let searchQuery = null;
 
-  // 1. Tenta identificar se tem pesquisa envolvida
+  // 3. Extrai o site e o que deve ser pesquisado/tocado
   let m = t.match(openAndSearchPattern);
   if (m) {
     targetSite = m[1].trim();
@@ -2079,7 +2081,7 @@ function detectLaunchCommand(text) {
     }
   }
 
-  // 2. Se não achou pesquisa, tenta a abertura simples
+  // 4. Se não achou pesquisa, tenta a abertura simples
   if (!targetSite) {
     for (const pat of simplePatterns) {
       m = t.match(pat);
@@ -2092,7 +2094,7 @@ function detectLaunchCommand(text) {
 
   if (!targetSite) return null;
 
-  // 3. Localiza o site no seu SITE_MAP
+  // 5. Localiza o site no seu SITE_MAP
   let foundSiteKey = null;
   if (SITE_MAP[targetSite]) foundSiteKey = targetSite;
   else {
@@ -2106,11 +2108,25 @@ function detectLaunchCommand(text) {
 
   if (!foundSiteKey) return null;
 
-  // 4. Monta a URL (Abre com pesquisa ou abre simples)
+  // 6. Monta a URL Final
   if (searchQuery && SEARCH_MAP[foundSiteKey]) {
+    let finalUrl = SEARCH_MAP[foundSiteKey] + encodeURIComponent(searchQuery);
+
+    // ✨ A MÁGICA: Se for intenção de TOCAR, usamos o redirecionamento direto (Estou com sorte)
+    if (isPlayIntent) {
+       const safeQuery = encodeURIComponent(searchQuery);
+       if (foundSiteKey === 'youtube') {
+         // Redireciona direto para o primeiro vídeo (/watch) correspondente
+         finalUrl = `https://duckduckgo.com/?q=!ducky+site:youtube.com/watch+${safeQuery}`;
+       } else if (foundSiteKey === 'spotify') {
+         // Redireciona direto para a primeira música (/track)
+         finalUrl = `https://duckduckgo.com/?q=!ducky+site:open.spotify.com/track+${safeQuery}`;
+       }
+    }
+
     return {
-      url: SEARCH_MAP[foundSiteKey] + encodeURIComponent(searchQuery),
-      siteName: `${foundSiteKey} (Pesquisa: ${searchQuery})`
+      url: finalUrl,
+      siteName: `${foundSiteKey} (${isPlayIntent ? 'Tocando' : 'Pesquisa'}: ${searchQuery})`
     };
   }
 
