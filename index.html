@@ -1144,7 +1144,8 @@ body, html { overscroll-behavior: none; }
   border-top: 1px solid rgba(255,255,255,0.05);
 }
 #wake-label { display: none !important; }
-#msg-input::placeholder { text-align: center; }
+#msg-input::placeholder { text-align: left; }
+#wake-dot { display: none !important; }
 </style>
 </head>
 <body>
@@ -1269,7 +1270,7 @@ body, html { overscroll-behavior: none; }
 <button id="live-btn" title="Modo Live — conversação em tempo real">
   <span class="material-symbols-outlined" style="font-size:18px">stream</span>
 </button>
-      <textarea id="msg-input" placeholder="Pergunte algo a Genesis..." rows="1" style="text-align:center;"></textarea>
+      <textarea id="msg-input" placeholder="Pergunte algo a Genesis..." rows="1"></textarea>
       <button id="send-btn">
         <span class="material-symbols-outlined">north</span>
       </button>
