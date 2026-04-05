@@ -4143,10 +4143,11 @@ REGRAS DE TRATAMENTO:
           } // <--- ESTA ERA A CHAVE QUE FALTAVA NO SEU CÓDIGO!
 
   // 2. Ferramenta de Abrir Site
+         // 2. Ferramenta de Abrir Site
           const callSite = calls.find(c => c.name === 'abrir_site');
           if (callSite) {
             const siteParam = callSite.args.site;
-            const pesquisaParam = callSite.args.pesquisa; // Captura o que a IA decidiu pesquisar
+            const pesquisaParam = callSite.args.pesquisa; 
             const callId = callSite.id;
             
             let msgTela = pesquisaParam ? `Sintonizando "${pesquisaParam}" no ${siteParam}...` : `Localizando ${siteParam}...`;
@@ -4159,11 +4160,11 @@ REGRAS DE TRATAMENTO:
               if (foundSiteKey) {
                   if (pesquisaParam && SEARCH_MAP[foundSiteKey]) {
                       
-                      // 🔥 A MÁGICA CORRIGIDA: DuckDuckGo "!ducky" (I'm feeling lucky via URL)
+                      // 🔥 A MÁGICA DEFINITIVA: Google "Estou com Sorte" (btnI=1)
                       if (foundSiteKey === 'youtube' || foundSiteKey === 'spotify') {
-                          // O comando !ducky força o redirecionamento imediato para o 1º resultado
-                          const magicQuery = `!ducky ${pesquisaParam} site:${foundSiteKey}.com`;
-                          targetUrl = `https://duckduckgo.com/?q=${encodeURIComponent(magicQuery)}`;
+                          const magicQuery = `${pesquisaParam} site:${foundSiteKey}.com`;
+                          // O parâmetro btnI=1 força o Google a pular as buscas e abrir o 1º link!
+                          targetUrl = `https://www.google.com/search?btnI=1&q=${encodeURIComponent(magicQuery)}`;
                       } else {
                           targetUrl = SEARCH_MAP[foundSiteKey] + encodeURIComponent(pesquisaParam);
                       }
@@ -4184,8 +4185,8 @@ REGRAS DE TRATAMENTO:
               }
 
               let statusVoice = pesquisaParam
-                 ? `A mídia '${pesquisaParam}' foi processada e está a abrir direto. Confirma a ação com uma frase curta e carismática.`
-                 : `O site ${siteParam} foi aberto na tela. Confirma a ação com uma frase curta e carismática.`;
+                 ? `A mídia '${pesquisaParam}' foi processada e está a abrir direto. Confirme a ação.`
+                 : `O site ${siteParam} foi aberto na tela. Confirme a ação.`;
 
               ws.send(JSON.stringify({
                 toolResponse: {
