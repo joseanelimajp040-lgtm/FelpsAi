@@ -2033,33 +2033,88 @@ const SITE_MAP = {
   'outlook':          'https://outlook.com',
 };
 
+// Cole isso LOGO ABAIXO do seu const SITE_MAP = { ... };
+
+const SEARCH_MAP = {
+  'youtube': 'https://www.youtube.com/results?search_query=',
+  'amazon': 'https://www.amazon.com.br/s?k=',
+  'google': 'https://www.google.com/search?q=',
+  'spotify': 'https://open.spotify.com/search/',
+  'mercado livre': 'https://lista.mercadolivre.com.br/',
+  'wikipedia': 'https://pt.wikipedia.org/wiki/Especial:Pesquisar?search=',
+  'twitter': 'https://twitter.com/search?q=',
+  'x': 'https://x.com/search?q=',
+  'twitch': 'https://www.twitch.tv/search?term='
+};
+
+// Substitua a sua função detectLaunchCommand inteira por esta:
+
 function detectLaunchCommand(text) {
   const t = text.toLowerCase().trim();
 
-  // Padrões: "abra o X", "abre o X", "abrir X", "vai para X", "acesse X", "abre X"
-  const patterns = [
+  // Padrão 1: "toca/pesquisa/procura [termo] no [site]"
+  const searchPattern = /^(?:tocar?|pesquisar?|procurar?|buscar?)\s+(.+?)\s+(?:no|na|em|pelo)\s+(.+)$/i;
+  // Padrão 2: "abre [site] e (toca|pesquisa) [termo]"
+  const openAndSearchPattern = /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+?)\s+e\s+(?:tocar?|pesquisar?|procurar?|buscar?)\s+(?:por\s+)?(.+)$/i;
+
+  const simplePatterns = [
     /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+)$/i,
     /^(?:vai\s+para?|acesse?|entre\s+no?|abre\s+o)\s+(.+)$/i,
     /^(?:open|launch)\s+(.+)$/i,
   ];
 
-  for (const pat of patterns) {
-    const m = t.match(pat);
+  let targetSite = null;
+  let searchQuery = null;
+
+  // 1. Tenta identificar se tem pesquisa envolvida
+  let m = t.match(openAndSearchPattern);
+  if (m) {
+    targetSite = m[1].trim();
+    searchQuery = m[2].trim();
+  } else {
+    m = t.match(searchPattern);
     if (m) {
-      const target = m[1].trim().replace(/[!?.]+$/, '');
+      searchQuery = m[1].trim();
+      targetSite = m[2].trim().replace(/[!?.]+$/, '');
+    }
+  }
 
-      // Busca exata no mapa
-      if (SITE_MAP[target]) return SITE_MAP[target];
-
-      // Busca parcial (ex: "googl" → "google")
-      for (const key of Object.keys(SITE_MAP)) {
-        if (key.includes(target) || target.includes(key)) {
-          return SITE_MAP[key];
-        }
+  // 2. Se não achou pesquisa, tenta a abertura simples
+  if (!targetSite) {
+    for (const pat of simplePatterns) {
+      m = t.match(pat);
+      if (m) {
+        targetSite = m[1].trim().replace(/[!?.]+$/, '');
+        break;
       }
     }
   }
-  return null;
+
+  if (!targetSite) return null;
+
+  // 3. Localiza o site no seu SITE_MAP
+  let foundSiteKey = null;
+  if (SITE_MAP[targetSite]) foundSiteKey = targetSite;
+  else {
+    for (const key of Object.keys(SITE_MAP)) {
+      if (key.includes(targetSite) || targetSite.includes(key)) {
+        foundSiteKey = key;
+        break;
+      }
+    }
+  }
+
+  if (!foundSiteKey) return null;
+
+  // 4. Monta a URL (Abre com pesquisa ou abre simples)
+  if (searchQuery && SEARCH_MAP[foundSiteKey]) {
+    return {
+      url: SEARCH_MAP[foundSiteKey] + encodeURIComponent(searchQuery),
+      siteName: `${foundSiteKey} (Pesquisa: ${searchQuery})`
+    };
+  }
+
+  return { url: SITE_MAP[foundSiteKey], siteName: foundSiteKey };
 }
 
 function renderLaunchReply(siteName, url) {
@@ -2146,14 +2201,13 @@ sendBtn.addEventListener('click', async () => {
   sendBtn.disabled = true;
   requestAnimationFrame(() => openPanel());
 
-  // ── LAUNCHER: detecta antes de ir ao Gemini ──
-  const launchUrl = detectLaunchCommand(txt);
-  if (launchUrl && !imageToSend) {
-    const siteName = txt.replace(/^(abr[ae](?:ir)?\s+(?:o\s+|a\s+)?|vai\s+para?\s+|acesse?\s+)/i, '').trim();
+ // Modifique este bloco dentro do seu sendBtn.addEventListener:
+  const launchData = detectLaunchCommand(txt);
+  if (launchData && !imageToSend) {
     openPanel();
     setState('responding');
-    renderLaunchReply(siteName, launchUrl);
-    saveToHistory(txt, `[site aberto: ${launchUrl}]`);
+    renderLaunchReply(launchData.siteName, launchData.url); // Usando o novo formato
+    saveToHistory(txt, `[site aberto: ${launchData.url}]`);
     setTimeout(() => { setState('idle'); sendBtn.disabled = false; }, 1000);
     return; // para aqui, não vai ao Gemini
   }
@@ -3972,15 +4026,19 @@ dlBtn.addEventListener('click', async function () {
                  required: ["prompt"]
               }
             },
-            {
+           {
               name: "abrir_site",
-              description: "Abre um site ou aplicativo da web solicitado pelo usuário (ex: YouTube, TikTok, Google).",
+              description: "Abre um site ou aplicativo. Pode também pesquisar ou tocar mídia se o usuário especificar o que quer.",
               parameters: {
                 type: "OBJECT",
                 properties: {
                   site: {
                     type: "STRING",
-                    description: "O nome do site ou plataforma que o usuário deseja abrir."
+                    description: "O nome do site ou plataforma (ex: youtube, amazon, spotify)."
+                  },
+                  pesquisa: {
+                    type: "STRING",
+                    description: "O termo de pesquisa, vídeo ou música a ser buscado. Deixe vazio se o usuário quiser apenas abrir a página inicial do site."
                   }
                 },
                 required: ["site"]
@@ -4062,36 +4120,50 @@ REGRAS DE TRATAMENTO:
             }
           } // <--- ESTA ERA A CHAVE QUE FALTAVA NO SEU CÓDIGO!
 
-          // 2. Ferramenta de Abrir Site
+   // 2. Ferramenta de Abrir Site
           const callSite = calls.find(c => c.name === 'abrir_site');
           if (callSite) {
             const siteParam = callSite.args.site;
+            const pesquisaParam = callSite.args.pesquisa; // Captura o que a IA decidiu pesquisar
             const callId = callSite.id;
             
-            if (rh) { rh.style.display = 'block'; rh.textContent = `Localizando ${siteParam}...`; }
+            let msgTela = pesquisaParam ? `Pesquisando "${pesquisaParam}" no ${siteParam}...` : `Localizando ${siteParam}...`;
+            if (rh) { rh.style.display = 'block'; rh.textContent = msgTela; }
 
             try {
-              let targetUrl = detectLaunchCommand(`abra ${siteParam}`);
-              if (!targetUrl) {
-                targetUrl = siteParam.startsWith('http') ? siteParam : `https://www.google.com/search?q=${encodeURIComponent(siteParam)}`;
+              let targetUrl = '';
+              let foundSiteKey = Object.keys(SITE_MAP).find(k => k.includes(siteParam.toLowerCase()) || siteParam.toLowerCase().includes(k));
+
+              if (foundSiteKey) {
+                  // Se o site existe no mapa e a IA mandou algo pra pesquisar
+                  if (pesquisaParam && SEARCH_MAP[foundSiteKey]) {
+                      targetUrl = SEARCH_MAP[foundSiteKey] + encodeURIComponent(pesquisaParam);
+                  } else {
+                      targetUrl = SITE_MAP[foundSiteKey];
+                  }
+              } else {
+                  // Fallback: se for uma URL solta ou pesquisa genérica no Google
+                  targetUrl = siteParam.startsWith('http') ? siteParam : `https://www.google.com/search?q=${encodeURIComponent(siteParam + (pesquisaParam ? ' ' + pesquisaParam : ''))}`;
               }
 
+              let displaySiteName = siteParam + (pesquisaParam ? ` (Pesquisa: ${pesquisaParam})` : '');
+
               if (typeof renderLaunchReply === 'function') {
-                renderLaunchReply(siteParam, targetUrl);
+                renderLaunchReply(displaySiteName, targetUrl);
               } else {
                 window.open(targetUrl, '_blank', 'noopener');
               }
 
-              // Devolve a confirmação instruindo a IA a FALAR com você!
+              let statusVoice = pesquisaParam
+                 ? `A pesquisa por '${pesquisaParam}' no ${siteParam} foi processada e aberta na tela. Confirme a ação com uma frase curta e carismática.`
+                 : `O site ${siteParam} foi aberto na tela. Confirme a ação com uma frase curta e carismática.`;
+
               ws.send(JSON.stringify({
                 toolResponse: {
                   functionResponses: [{
                     id: callId,
                     name: "abrir_site",
-                    response: { 
-                      result: "success", 
-                      status: `O site ${siteParam} foi processado e aberto na tela do usuário. Agora, fale uma frase curta e carismática confirmando que você executou a ordem (ex: 'É pra já, chefe', 'Abrindo o YouTube').` 
-                    }
+                    response: { result: "success", status: statusVoice }
                   }]
                 }
               }));
