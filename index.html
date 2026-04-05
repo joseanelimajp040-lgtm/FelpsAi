@@ -2052,10 +2052,9 @@ const SEARCH_MAP = {
 function detectLaunchCommand(text) {
   const t = text.toLowerCase().trim();
 
-  // Padrão 1: "toca/pesquisa/procura [termo] no [site]"
-  const searchPattern = /^(?:tocar?|pesquisar?|procurar?|buscar?)\s+(.+?)\s+(?:no|na|em|pelo)\s+(.+)$/i;
-  // Padrão 2: "abre [site] e (toca|pesquisa) [termo]"
-  const openAndSearchPattern = /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+?)\s+e\s+(?:tocar?|pesquisar?|procurar?|buscar?)\s+(?:por\s+)?(.+)$/i;
+  // Captura a ação (tocar, pesquisar, etc), o termo e o site
+  const searchPattern = /^(tocar?|pesquisar?|procurar?|buscar?)\s+(.+?)\s+(?:no|na|em|pelo)\s+(.+)$/i;
+  const openAndSearchPattern = /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+?)\s+e\s+(tocar?|pesquisar?|procurar?|buscar?)\s+(?:por\s+)?(.+)$/i;
 
   const simplePatterns = [
     /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+)$/i,
@@ -2065,21 +2064,22 @@ function detectLaunchCommand(text) {
 
   let targetSite = null;
   let searchQuery = null;
+  let action = null; // Guarda se a intenção é tocar ou pesquisar
 
-  // 1. Tenta identificar se tem pesquisa envolvida
   let m = t.match(openAndSearchPattern);
   if (m) {
     targetSite = m[1].trim();
-    searchQuery = m[2].trim();
+    action = m[2].trim();
+    searchQuery = m[3].trim();
   } else {
     m = t.match(searchPattern);
     if (m) {
-      searchQuery = m[1].trim();
-      targetSite = m[2].trim().replace(/[!?.]+$/, '');
+      action = m[1].trim();
+      searchQuery = m[2].trim();
+      targetSite = m[3].trim().replace(/[!?.]+$/, '');
     }
   }
 
-  // 2. Se não achou pesquisa, tenta a abertura simples
   if (!targetSite) {
     for (const pat of simplePatterns) {
       m = t.match(pat);
@@ -2092,7 +2092,6 @@ function detectLaunchCommand(text) {
 
   if (!targetSite) return null;
 
-  // 3. Localiza o site no seu SITE_MAP
   let foundSiteKey = null;
   if (SITE_MAP[targetSite]) foundSiteKey = targetSite;
   else {
@@ -2106,12 +2105,26 @@ function detectLaunchCommand(text) {
 
   if (!foundSiteKey) return null;
 
-  // 4. Monta a URL (Abre com pesquisa ou abre simples)
-  if (searchQuery && SEARCH_MAP[foundSiteKey]) {
-    return {
-      url: SEARCH_MAP[foundSiteKey] + encodeURIComponent(searchQuery),
-      siteName: `${foundSiteKey} (Pesquisa: ${searchQuery})`
-    };
+  if (searchQuery) {
+    // 🪄 A MAGIA ACONTECE AQUI:
+    // Se a ação for "tocar", usamos o truque '!ducky' para abrir o 1º resultado direto!
+    const isPlayAction = action.startsWith('toca') || action.startsWith('reproduz');
+
+    if (isPlayAction && (foundSiteKey === 'youtube' || foundSiteKey === 'spotify')) {
+       let domain = foundSiteKey === 'youtube' ? 'youtube.com' : 'spotify.com';
+       return {
+         url: `https://duckduckgo.com/?q=!ducky+site:${domain}+${encodeURIComponent(searchQuery)}`,
+         siteName: `${foundSiteKey} (Tocando: ${searchQuery})`
+       };
+    }
+
+    // Se for só "pesquisar", continua caindo na página de busca normal
+    if (SEARCH_MAP[foundSiteKey]) {
+      return {
+        url: SEARCH_MAP[foundSiteKey] + encodeURIComponent(searchQuery),
+        siteName: `${foundSiteKey} (Pesquisa: ${searchQuery})`
+      };
+    }
   }
 
   return { url: SITE_MAP[foundSiteKey], siteName: foundSiteKey };
@@ -4038,7 +4051,11 @@ dlBtn.addEventListener('click', async function () {
                   },
                   pesquisa: {
                     type: "STRING",
-                    description: "O termo de pesquisa, vídeo ou música a ser buscado. Deixe vazio se o usuário quiser apenas abrir a página inicial do site."
+                    description: "O termo de pesquisa, vídeo ou música a ser buscado. Deixe vazio se for apenas abrir a página."
+                  },
+                  acao: {
+                    type: "STRING",
+                    description: "Use 'tocar' se o usuário pedir para tocar/ouvir uma música ou vídeo específico. Use 'pesquisar' se for apenas para buscar resultados."
                   }
                 },
                 required: ["site"]
@@ -4124,10 +4141,14 @@ REGRAS DE TRATAMENTO:
           const callSite = calls.find(c => c.name === 'abrir_site');
           if (callSite) {
             const siteParam = callSite.args.site;
-            const pesquisaParam = callSite.args.pesquisa; // Captura o que a IA decidiu pesquisar
+            const pesquisaParam = callSite.args.pesquisa;
+            const acaoParam = callSite.args.acao; // Lê se a intenção é "tocar" ou "pesquisar"
             const callId = callSite.id;
             
-            let msgTela = pesquisaParam ? `Pesquisando "${pesquisaParam}" no ${siteParam}...` : `Localizando ${siteParam}...`;
+            let msgTela = pesquisaParam 
+               ? (acaoParam === 'tocar' ? `Colocando "${pesquisaParam}" para tocar no ${siteParam}...` : `Pesquisando "${pesquisaParam}" no ${siteParam}...`) 
+               : `Localizando ${siteParam}...`;
+               
             if (rh) { rh.style.display = 'block'; rh.textContent = msgTela; }
 
             try {
@@ -4135,18 +4156,24 @@ REGRAS DE TRATAMENTO:
               let foundSiteKey = Object.keys(SITE_MAP).find(k => k.includes(siteParam.toLowerCase()) || siteParam.toLowerCase().includes(k));
 
               if (foundSiteKey) {
-                  // Se o site existe no mapa e a IA mandou algo pra pesquisar
-                  if (pesquisaParam && SEARCH_MAP[foundSiteKey]) {
-                      targetUrl = SEARCH_MAP[foundSiteKey] + encodeURIComponent(pesquisaParam);
+                  if (pesquisaParam) {
+                      // 🪄 A MAGIA DO REDIRECIONAMENTO DIRETO NO LIVE MODE
+                      if (acaoParam === 'tocar' && (foundSiteKey === 'youtube' || foundSiteKey === 'spotify')) {
+                          let domain = foundSiteKey === 'youtube' ? 'youtube.com' : 'spotify.com';
+                          targetUrl = `https://duckduckgo.com/?q=!ducky+site:${domain}+${encodeURIComponent(pesquisaParam)}`;
+                      } else if (SEARCH_MAP[foundSiteKey]) {
+                          targetUrl = SEARCH_MAP[foundSiteKey] + encodeURIComponent(pesquisaParam);
+                      } else {
+                          targetUrl = SITE_MAP[foundSiteKey];
+                      }
                   } else {
                       targetUrl = SITE_MAP[foundSiteKey];
                   }
               } else {
-                  // Fallback: se for uma URL solta ou pesquisa genérica no Google
                   targetUrl = siteParam.startsWith('http') ? siteParam : `https://www.google.com/search?q=${encodeURIComponent(siteParam + (pesquisaParam ? ' ' + pesquisaParam : ''))}`;
               }
 
-              let displaySiteName = siteParam + (pesquisaParam ? ` (Pesquisa: ${pesquisaParam})` : '');
+              let displaySiteName = siteParam + (pesquisaParam ? (acaoParam === 'tocar' ? ` (Tocando: ${pesquisaParam})` : ` (Pesquisa: ${pesquisaParam})`) : '');
 
               if (typeof renderLaunchReply === 'function') {
                 renderLaunchReply(displaySiteName, targetUrl);
@@ -4154,9 +4181,10 @@ REGRAS DE TRATAMENTO:
                 window.open(targetUrl, '_blank', 'noopener');
               }
 
-              let statusVoice = pesquisaParam
-                 ? `A pesquisa por '${pesquisaParam}' no ${siteParam} foi processada e aberta na tela. Confirme a ação com uma frase curta e carismática.`
-                 : `O site ${siteParam} foi aberto na tela. Confirme a ação com uma frase curta e carismática.`;
+              // Instrui a IA a dar uma resposta legal baseada na ação
+              let statusVoice = (acaoParam === 'tocar' && pesquisaParam)
+                 ? `O conteúdo '${pesquisaParam}' foi colocado para tocar direto na tela do usuário. Confirme a ação com uma frase animada (ex: 'É pra já! Colocando o som na caixa').`
+                 : `O site ${siteParam} foi processado e aberto na tela do usuário. Confirme a ação de forma natural.`;
 
               ws.send(JSON.stringify({
                 toolResponse: {
@@ -4175,10 +4203,8 @@ REGRAS DE TRATAMENTO:
                 }
               }));
             }
+            return; // Garante que a execução para por aqui
           }
-        }
-        return; // Sai da função para não processar esse frame como texto
-      }
       
       if (msg.setupComplete) {
         liveActive = true;
