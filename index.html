@@ -1143,6 +1143,8 @@ body, html { overscroll-behavior: none; }
   color: rgba(255,255,255,0.18); margin-top: 16px; padding-top: 12px;
   border-top: 1px solid rgba(255,255,255,0.05);
 }
+#wake-label { display: none !important; }
+#msg-input::placeholder { text-align: center; }
 </style>
 </head>
 <body>
@@ -1267,10 +1269,7 @@ body, html { overscroll-behavior: none; }
 <button id="live-btn" title="Modo Live — conversação em tempo real">
   <span class="material-symbols-outlined" style="font-size:18px">stream</span>
 </button>
-<button id="mic-btn" title="Falar com o agente">
-  <span class="material-symbols-outlined" style="font-size:18px">mic</span>
-</button>
-      <textarea id="msg-input" placeholder="Pergunte algo ao agente..." rows="1"></textarea>
+      <textarea id="msg-input" placeholder="Pergunte algo a Genesis..." rows="1" style="text-align:center;"></textarea>
       <button id="send-btn">
         <span class="material-symbols-outlined">north</span>
       </button>
