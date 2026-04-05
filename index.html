@@ -2433,9 +2433,11 @@ setTimeout(() => recognition.stop(), 100);
   }
 }
 
-micBtn.addEventListener('click', () => {
-  isListening ? stopListening(false) : startListening();
-});
+if (micBtn) {
+  micBtn.addEventListener('click', () => {
+    isListening ? stopListening(false) : startListening();
+  });
+}
 
 // ── VOLUME / AUDIO ANALYSER ──
 let audioCtx = null, analyser = null, micStream = null, volRAF = null;
@@ -4305,7 +4307,8 @@ REGRAS DE TRATAMENTO:
     if (typeof setState === 'function') setState('idle');
     if (liveDotEl) liveDotEl.classList.remove('active');
   }
-};
+ };
+}
 
   /* ─── Bind do botão ─── */
   liveBtn.addEventListener('click', () => liveActive ? stopLive() : startLive());
