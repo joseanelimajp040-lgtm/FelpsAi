@@ -4220,21 +4220,16 @@ REGRAS DE TRATAMENTO:
         return;
       }
 
-      /* Texto da IA */
+     /* Texto da IA — capturado só para histórico, sem exibir na gaveta */
       const textPart = msg.serverContent?.modelTurn?.parts?.find(p => p.text);
       if (textPart?.text) {
-        if (!currentAiEl) {
-          currentAiEl = createMsgEl('ai');
-          aiText = '';
-        }
         aiText += textPart.text;
-        currentAiEl.querySelector('.live-msg-text').textContent = aiText;
-        document.getElementById('reply-area').scrollTop = 99999;
       }
 
       /* Áudio da IA */
       const audioPart = msg.serverContent?.modelTurn?.parts?.find(p => p.inlineData?.mimeType?.startsWith('audio/pcm'));
       if (audioPart?.inlineData?.data) {
+        if (typeof setState === 'function') setState('responding');
         try {
           if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
           // Tira o contexto do estado de suspensão (comum em alguns navegadores)
@@ -4280,21 +4275,20 @@ REGRAS DE TRATAMENTO:
       const userTranscript = msg.serverContent?.inputTranscription?.text;
       
       if (userTranscript) {
-        currentUserEl = createMsgEl('user');
-        currentUserEl.querySelector('.live-msg-text').textContent = userTranscript;
-        userText = userTranscript;
-        currentAiEl   = null;
-        aiText        = '';
-        document.getElementById('reply-area').scrollTop = 99999;
+        userText    = userTranscript;
+        currentAiEl = null;
+        aiText      = '';
+        if (typeof setState === 'function') setState('thinking');
       }
 
-      /* Fim do turno da IA */
+     /* Fim do turno da IA */
       if (msg.serverContent?.turnComplete) {
         currentAiEl = null;
         if (typeof saveToHistory === 'function' && userText && aiText) {
           saveToHistory(userText, aiText);
         }
         aiText = '';
+        if (typeof setState === 'function') setState('idle');
       }
     };
 
