@@ -1769,6 +1769,7 @@ REGRAS DE TRATAMENTO:
 5. NUNCA imprima pensamentos internos, intenções ou ações entre asteriscos.
 6. Fale de forma natural, direta e conversacional — como uma IA sofisticada e confiante, não como uma assistente genérica.
 7. AÇÃO OBRIGATÓRIA: Quando o usuário pedir para abrir um site, execute a ferramenta \`abrir_site\`. Após receber a confirmação de sucesso da ferramenta, responda verbalmente de forma curta, natural e sempre variada confirmando a ação (ex: "É pra já, chefe.", "Abrindo o YouTube agora mesmo.", "Colocando na tela, pai."). NUNCA escreva textos de log ou intenções em inglês.`
+8. CONTROLE DE SISTEMA: Quando o usuário pedir para abrir um programa no computador (ex: "abra o VS Code", "abra o terminal"), execute a ferramenta \`abrir_aplicativo\`. Confirme a ação verbalmente de forma ágil (ex: "Iniciando o sistema agora, chefe.", "Abrindo o terminal, pai."). 
   }]
 },
   contents: conversationHistory,
@@ -4061,6 +4062,20 @@ dlBtn.addEventListener('click', async function () {
                 required: ["site"]
               }
             }
+          {
+  "name": "abrir_aplicativo",
+  "description": "Abre um aplicativo local ou executa um comando diretamente no computador do usuário.",
+  "parameters": {
+    "type": "OBJECT",
+    "properties": {
+      "app": {
+        "type": "STRING",
+        "description": "O nome do aplicativo a ser aberto (ex: code, terminal, calculadora, arquivos)."
+      }
+    },
+    "required": ["app"]
+      }
+        }
           ]
         }
       ],
@@ -4084,6 +4099,7 @@ REGRAS DE TRATAMENTO:
 5. NUNCA imprima pensamentos internos, intenções ou ações entre asteriscos.
 6. Fale de forma natural, direta e conversacional — como uma IA sofisticada e confiante, não como uma assistente genérica.
 7. AÇÃO OBRIGATÓRIA: Quando o usuário pedir para abrir um site, execute a ferramenta \`abrir_site\`. Após receber a confirmação de sucesso da ferramenta, responda verbalmente de forma curta, natural e sempre variada confirmando a ação (ex: "É pra já, chefe.", "Abrindo o YouTube agora mesmo."). NUNCA escreva textos de log ou intenções em inglês.`
+8. CONTROLE DE SISTEMA: Quando o usuário pedir para abrir um programa no computador (ex: "abra o VS Code", "abra o terminal"), execute a ferramenta \`abrir_aplicativo\`. Confirme a ação verbalmente de forma ágil (ex: "Iniciando o sistema agora, chefe.", "Abrindo o terminal, pai.").
             }]
           }
         }
@@ -4201,6 +4217,45 @@ REGRAS DE TRATAMENTO:
               }));
             }
           }
+  // 3. Ferramenta de Abrir Aplicativo Local
+const callApp = calls.find(c => c.name === 'abrir_aplicativo');
+if (callApp) {
+  const appParam = callApp.args.app;
+  const callId = callApp.id;
+  
+  if (rh) { rh.style.display = 'block'; rh.textContent = `Iniciando ${appParam} no sistema base...`; }
+
+  try {
+    // Dispara para a ponte Node.js local
+    const resApp = await fetch('http://localhost:3000/run-app', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app: appParam })
+    });
+
+    const dataApp = await resApp.json();
+    if (!resApp.ok || !dataApp.success) throw new Error(dataApp.error || 'Falha na ponte local');
+
+    // Confirma para o Gemini que a execução na máquina foi um sucesso
+    ws.send(JSON.stringify({
+      toolResponse: {
+        functionResponses: [{
+          id: callId,
+          name: "abrir_aplicativo",
+          response: { result: "success", status: `O aplicativo ${appParam} foi aberto com sucesso na máquina do usuário.` }
+        }]
+      }
+    }));
+
+  } catch (err) {
+    console.error("Erro na ponte local:", err);
+    ws.send(JSON.stringify({
+      toolResponse: {
+        functionResponses: [{ id: callId, name: "abrir_aplicativo", response: { result: "error", reason: "Não foi possível conectar ao servidor local. Verifique se a ponte Node.js está rodando na porta 3000." } }]
+      }
+    }));
+  }
+}
         }
         return; // Sai da função para não processar esse frame como texto
       }
