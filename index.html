@@ -4087,17 +4087,17 @@ dlBtn.addEventListener('click', async function () {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
-      /* ─── INTERCEPTA CHAMADAS DE FUNÇÃO (FUNCTION CALLING) NO LIVE MODE ─── */
+     /* ─── INTERCEPTA CHAMADAS DE FUNÇÃO (FUNCTION CALLING) NO LIVE MODE ─── */
       if (msg.toolCall) {
         const calls = msg.toolCall.functionCalls;
         
         if (calls && calls.length > 0) {
           
           // 1. Ferramenta de Imagem
-          const call = calls.find(c => c.name === 'gerar_imagem');
-          if (call) {
-            const prompt = call.args.prompt;
-            const callId = call.id; 
+          const callImg = calls.find(c => c.name === 'gerar_imagem');
+          if (callImg) {
+            const prompt = callImg.args.prompt;
+            const callId = callImg.id; 
             if (rh) { rh.style.display = 'block'; rh.textContent = 'Gerando imagem...'; }
             
             try {
@@ -4127,14 +4127,14 @@ dlBtn.addEventListener('click', async function () {
                 }
               }));
             }
-          } // <--- ESTA ERA A CHAVE QUE FALTAVA NO SEU CÓDIGO!
+          }
 
-   // 2. Ferramenta de Abrir Site
+          // 2. Ferramenta de Abrir Site
           const callSite = calls.find(c => c.name === 'abrir_site');
           if (callSite) {
             const siteParam = callSite.args.site;
             const pesquisaParam = callSite.args.pesquisa;
-            const acaoParam = callSite.args.acao; // Lê se a intenção é "tocar" ou "pesquisar"
+            const acaoParam = callSite.args.acao;
             const callId = callSite.id;
             
             let msgTela = pesquisaParam 
@@ -4149,7 +4149,6 @@ dlBtn.addEventListener('click', async function () {
 
               if (foundSiteKey) {
                   if (pesquisaParam) {
-                      // 🪄 A MAGIA DO REDIRECIONAMENTO DIRETO NO LIVE MODE
                       if (acaoParam === 'tocar' && (foundSiteKey === 'youtube' || foundSiteKey === 'spotify')) {
                           let domain = foundSiteKey === 'youtube' ? 'youtube.com' : 'spotify.com';
                           targetUrl = `https://duckduckgo.com/?q=!ducky+site:${domain}+${encodeURIComponent(pesquisaParam)}`;
@@ -4173,9 +4172,8 @@ dlBtn.addEventListener('click', async function () {
                 window.open(targetUrl, '_blank', 'noopener');
               }
 
-              // Instrui a IA a dar uma resposta legal baseada na ação
               let statusVoice = (acaoParam === 'tocar' && pesquisaParam)
-                 ? `O conteúdo '${pesquisaParam}' foi colocado para tocar direto na tela do usuário. Confirme a ação com uma frase animada (ex: 'É pra já! Colocando o som na caixa').`
+                 ? `O conteúdo '${pesquisaParam}' foi colocado para tocar direto na tela do usuário. Confirme a ação com uma frase animada.`
                  : `O site ${siteParam} foi processado e aberto na tela do usuário. Confirme a ação de forma natural.`;
 
               ws.send(JSON.stringify({
@@ -4195,8 +4193,13 @@ dlBtn.addEventListener('click', async function () {
                 }
               }));
             }
-            return; // Garante que a execução para por aqui
           }
+        }
+        
+        return; // As chaves que faltavam foram fechadas, e o return fica aqui no final da checagem de ferramentas!
+      }
+
+      if (msg.setupComplete) {
       
       if (msg.setupComplete) {
         liveActive = true;
