@@ -4062,20 +4062,20 @@ dlBtn.addEventListener('click', async function () {
                 required: ["site"]
               }
             },
-          {
+         {
   "name": "abrir_aplicativo",
-  "description": "Abre um aplicativo local ou executa um comando diretamente no computador do usuário.",
+  "description": "Abre um aplicativo local no computador do usuário.",
   "parameters": {
     "type": "OBJECT",
     "properties": {
       "app": {
         "type": "STRING",
-        "description": "O nome do aplicativo a ser aberto (ex: code, terminal, calculadora, arquivos)."
+        "description": "O nome exato do comando ou executável do aplicativo no Windows (ex: 'brave', 'msedge', 'chrome', 'spotify', 'code', 'calc', 'notepad'). Aja com inteligência: se o usuário falar com erro de pronúncia (ex: 'bravo'), deduza que é 'brave'. Se pedir o navegador da Microsoft, envie 'msedge'."
       }
     },
     "required": ["app"]
-      }
-        }
+            }
+           }
           ]
         }
       ],
