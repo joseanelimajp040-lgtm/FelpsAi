@@ -2191,10 +2191,10 @@ function renderLaunchReply(siteName, url) {
 
   // O comando de abertura automática:
   setTimeout(() => {
-    const novaAba = window.open(url, '_blank', 'noopener');
-    
-    // pop-up abre normalmente — aviso removido
-  
+    window.open(url, '_blank', 'noopener');
+  }, 800);
+}
+
 sendBtn.addEventListener('click', async () => {
   const txt = msgInput.value.trim();
   if ((!txt && !pendingImage) || STATE !== 'idle') return;
