@@ -2193,14 +2193,7 @@ function renderLaunchReply(siteName, url) {
   setTimeout(() => {
     const novaAba = window.open(url, '_blank', 'noopener');
     
-    // Verifica se o navegador bloqueou a abertura mágica
-    if (!novaAba || novaAba.closed || typeof novaAba.closed == 'undefined') {
-      replyHint.style.display = 'block';
-      replyHint.textContent = '⚠ Pop-up bloqueado pelo navegador. Permita nas configurações ou clique em "Abrir".';
-      replyHint.style.color = '#ff8080';
-    }
-  }, 100);
-}
+    // pop-up abre normalmente — aviso removido
   
 sendBtn.addEventListener('click', async () => {
   const txt = msgInput.value.trim();
@@ -4312,16 +4305,13 @@ REGRAS DE TRATAMENTO:
     };
     
     ws.onclose = () => {
-      if (liveActive) {
-        stopLive();
-      } else {
-        showErr('⚠ Conexão encerrada. Verifique a chave ou o modelo.');
-        resetBtn();
-        if (typeof setState === 'function') setState('idle');
-        if (liveDotEl) liveDotEl.classList.remove('active');
-      }
-    };
+  if (liveActive) stopLive();
+  else {
+    resetBtn();
+    if (typeof setState === 'function') setState('idle');
+    if (liveDotEl) liveDotEl.classList.remove('active');
   }
+};
 
   /* ─── Bind do botão ─── */
   liveBtn.addEventListener('click', () => liveActive ? stopLive() : startLive());
