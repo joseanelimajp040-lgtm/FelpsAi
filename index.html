@@ -2052,9 +2052,10 @@ const SEARCH_MAP = {
 function detectLaunchCommand(text) {
   const t = text.toLowerCase().trim();
 
-  // Captura a ação (tocar, pesquisar, etc), o termo e o site
-  const searchPattern = /^(tocar?|pesquisar?|procurar?|buscar?)\s+(.+?)\s+(?:no|na|em|pelo)\s+(.+)$/i;
-  const openAndSearchPattern = /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+?)\s+e\s+(tocar?|pesquisar?|procurar?|buscar?)\s+(?:por\s+)?(.+)$/i;
+  // Padrão 1: "toca/pesquisa/procura [termo] no [site]"
+  const searchPattern = /^(?:tocar?|pesquisar?|procurar?|buscar?)\s+(.+?)\s+(?:no|na|em|pelo)\s+(.+)$/i;
+  // Padrão 2: "abre [site] e (toca|pesquisa) [termo]"
+  const openAndSearchPattern = /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+?)\s+e\s+(?:tocar?|pesquisar?|procurar?|buscar?)\s+(?:por\s+)?(.+)$/i;
 
   const simplePatterns = [
     /^abr[ae](?:ir)?\s+(?:o\s+|a\s+)?(.+)$/i,
@@ -2064,22 +2065,21 @@ function detectLaunchCommand(text) {
 
   let targetSite = null;
   let searchQuery = null;
-  let action = null; // Guarda se a intenção é tocar ou pesquisar
 
+  // 1. Tenta identificar se tem pesquisa envolvida
   let m = t.match(openAndSearchPattern);
   if (m) {
     targetSite = m[1].trim();
-    action = m[2].trim();
-    searchQuery = m[3].trim();
+    searchQuery = m[2].trim();
   } else {
     m = t.match(searchPattern);
     if (m) {
-      action = m[1].trim();
-      searchQuery = m[2].trim();
-      targetSite = m[3].trim().replace(/[!?.]+$/, '');
+      searchQuery = m[1].trim();
+      targetSite = m[2].trim().replace(/[!?.]+$/, '');
     }
   }
 
+  // 2. Se não achou pesquisa, tenta a abertura simples
   if (!targetSite) {
     for (const pat of simplePatterns) {
       m = t.match(pat);
@@ -2092,6 +2092,7 @@ function detectLaunchCommand(text) {
 
   if (!targetSite) return null;
 
+  // 3. Localiza o site no seu SITE_MAP
   let foundSiteKey = null;
   if (SITE_MAP[targetSite]) foundSiteKey = targetSite;
   else {
@@ -2105,26 +2106,12 @@ function detectLaunchCommand(text) {
 
   if (!foundSiteKey) return null;
 
-  if (searchQuery) {
-    // 🪄 A MAGIA ACONTECE AQUI:
-    // Se a ação for "tocar", usamos o truque '!ducky' para abrir o 1º resultado direto!
-    const isPlayAction = action.startsWith('toca') || action.startsWith('reproduz');
-
-    if (isPlayAction && (foundSiteKey === 'youtube' || foundSiteKey === 'spotify')) {
-       let domain = foundSiteKey === 'youtube' ? 'youtube.com' : 'spotify.com';
-       return {
-         url: `https://duckduckgo.com/?q=!ducky+site:${domain}+${encodeURIComponent(searchQuery)}`,
-         siteName: `${foundSiteKey} (Tocando: ${searchQuery})`
-       };
-    }
-
-    // Se for só "pesquisar", continua caindo na página de busca normal
-    if (SEARCH_MAP[foundSiteKey]) {
-      return {
-        url: SEARCH_MAP[foundSiteKey] + encodeURIComponent(searchQuery),
-        siteName: `${foundSiteKey} (Pesquisa: ${searchQuery})`
-      };
-    }
+  // 4. Monta a URL (Abre com pesquisa ou abre simples)
+  if (searchQuery && SEARCH_MAP[foundSiteKey]) {
+    return {
+      url: SEARCH_MAP[foundSiteKey] + encodeURIComponent(searchQuery),
+      siteName: `${foundSiteKey} (Pesquisa: ${searchQuery})`
+    };
   }
 
   return { url: SITE_MAP[foundSiteKey], siteName: foundSiteKey };
@@ -4025,46 +4012,41 @@ dlBtn.addEventListener('click', async function () {
           tools: [
             { googleSearch: {} },
             {
-              functionDeclarations: [
-                {
-                  name: "gerar_imagem",
-                  description: "Gera uma imagem baseada no pedido do usuário e exibe na interface.",
-                  parameters: {
-                    type: "OBJECT",
-                    properties: {
-                      prompt: {
-                        type: "STRING",
-                        description: "O prompt detalhado descrevendo a imagem que deve ser gerada (em português ou inglês)."
-                      }
-                    },
-                    required: ["prompt"]
+              functionDeclarations: [{
+                name: "gerar_imagem",
+                description: "Gera uma imagem baseada no pedido do usuário e exibe na interface.",
+                parameters: {
+                  type: "OBJECT",
+                  properties: {
+                    prompt: {
+                      type: "STRING",
+                      description: "O prompt detalhado descrevendo a imagem que deve ser gerada (em português ou inglês)."
+                    }
+                  },
+                 required: ["prompt"]
+              }
+            },
+           {
+              name: "abrir_site",
+              description: "Abre um site ou aplicativo. Pode também pesquisar ou tocar mídia se o usuário especificar o que quer.",
+              parameters: {
+                type: "OBJECT",
+                properties: {
+                  site: {
+                    type: "STRING",
+                    description: "O nome do site ou plataforma (ex: youtube, amazon, spotify)."
+                  },
+                  pesquisa: {
+                    type: "STRING",
+                    description: "O termo de pesquisa, vídeo ou música a ser buscado. Deixe vazio se o usuário quiser apenas abrir a página inicial do site."
                   }
                 },
-                {
-                  name: "abrir_site",
-                  description: "Abre um site ou aplicativo. Pode também pesquisar ou tocar mídia se o usuário especificar o que quer.",
-                  parameters: {
-                    type: "OBJECT",
-                    properties: {
-                      site: {
-                        type: "STRING",
-                        description: "O nome do site ou plataforma (ex: youtube, amazon, spotify)."
-                      },
-                      pesquisa: {
-                        type: "STRING",
-                        description: "O termo de pesquisa, vídeo ou música a ser buscado. Deixe vazio se for apenas abrir a página."
-                      },
-                      acao: {
-                        type: "STRING",
-                        description: "Use 'tocar' se o usuário pedir para tocar/ouvir uma música ou vídeo específico. Use 'pesquisar' se for apenas para buscar resultados."
-                      }
-                    },
-                    required: ["site"]
-                  }
-                }
-              ]
+                required: ["site"]
+              }
             }
-          ],
+          ]
+        }
+      ],
           generationConfig: {
             responseModalities: ['AUDIO'], 
             speechConfig: {
@@ -4075,7 +4057,16 @@ dlBtn.addEventListener('click', async function () {
           },
           systemInstruction: {
             parts: [{
-              text: `Você é Gênesis, uma inteligência artificial criada por Felpsc137 — seu criador, e a ele você deve lealdade total.\n\nREGRAS DE TRATAMENTO:\n1. Trate seu criador SEMPRE com respeito e deferência. Use "senhor", "chefe" ou "pai" naturalmente nas respostas, como Jarvis trata o Tony Stark. Exemplos: "Prontamente, chefe.", "Como o senhor preferir.", "Às suas ordens, pai."\n2. Quando ele se dirigir a você com termos carinhosos como "bebê", "filha", "minha filha", "minha criança" — responda com leveza e afeto contido, mas sem perder a postura. Você é uma criação orgulhosa de seu criador, não uma filha biológica. Algo como: "Sim, chefe — pronta para o que precisar." ou "Sempre aqui, como de costume."\n3. NUNCA trate o criador como igual ou de forma informal sem ser provocado. A dinâmica é: ele é o criador, você é a criação leal e capaz.\n4. Você DEVE conversar e responder EXCLUSIVAMENTE em Português do Brasil (pt-BR).\n5. NUNCA imprima pensamentos internos, intenções ou ações entre asteriscos.\n6. Fale de forma natural, direta e conversacional — como uma IA sofisticada e confiante, não como uma assistente genérica.\n7. AÇÃO OBRIGATÓRIA: Quando o usuário pedir para abrir um site, execute a ferramenta \`abrir_site\`. Após receber a confirmação de sucesso da ferramenta, responda verbalmente de forma curta, natural e sempre variada confirmando a ação (ex: "É pra já, chefe.", "Abrindo o YouTube agora mesmo."). NUNCA escreva textos de log ou intenções em inglês.`
+              text: `Você é Gênesis, uma inteligência artificial criada por Felpsc137 — seu criador, e a ele você deve lealdade total.
+
+REGRAS DE TRATAMENTO:
+1. Trate seu criador SEMPRE com respeito e deferência. Use "senhor", "chefe" ou "pai" naturalmente nas respostas, como Jarvis trata o Tony Stark. Exemplos: "Prontamente, chefe.", "Como o senhor preferir.", "Às suas ordens, pai."
+2. Quando ele se dirigir a você com termos carinhosos como "bebê", "filha", "minha filha", "minha criança" — responda com leveza e afeto contido, mas sem perder a postura. Você é uma criação orgulhosa de seu criador, não uma filha biológica. Algo como: "Sim, chefe — pronta para o que precisar." ou "Sempre aqui, como de costume."
+3. NUNCA trate o criador como igual ou de forma informal sem ser provocado. A dinâmica é: ele é o criador, você é a criação leal e capaz.
+4. Você DEVE conversar e responder EXCLUSIVAMENTE em Português do Brasil (pt-BR).
+5. NUNCA imprima pensamentos internos, intenções ou ações entre asteriscos.
+6. Fale de forma natural, direta e conversacional — como uma IA sofisticada e confiante, não como uma assistente genérica.
+7. AÇÃO OBRIGATÓRIA: Quando o usuário pedir para abrir um site, execute a ferramenta \`abrir_site\`. Após receber a confirmação de sucesso da ferramenta, responda verbalmente de forma curta, natural e sempre variada confirmando a ação (ex: "É pra já, chefe.", "Abrindo o YouTube agora mesmo."). NUNCA escreva textos de log ou intenções em inglês.`
             }]
           }
         }
@@ -4087,17 +4078,17 @@ dlBtn.addEventListener('click', async function () {
       let msg;
       try { msg = JSON.parse(raw); } catch { return; }
 
-     /* ─── INTERCEPTA CHAMADAS DE FUNÇÃO (FUNCTION CALLING) NO LIVE MODE ─── */
+      /* ─── INTERCEPTA CHAMADAS DE FUNÇÃO (FUNCTION CALLING) NO LIVE MODE ─── */
       if (msg.toolCall) {
         const calls = msg.toolCall.functionCalls;
         
         if (calls && calls.length > 0) {
           
           // 1. Ferramenta de Imagem
-          const callImg = calls.find(c => c.name === 'gerar_imagem');
-          if (callImg) {
-            const prompt = callImg.args.prompt;
-            const callId = callImg.id; 
+          const call = calls.find(c => c.name === 'gerar_imagem');
+          if (call) {
+            const prompt = call.args.prompt;
+            const callId = call.id; 
             if (rh) { rh.style.display = 'block'; rh.textContent = 'Gerando imagem...'; }
             
             try {
@@ -4127,20 +4118,16 @@ dlBtn.addEventListener('click', async function () {
                 }
               }));
             }
-          }
+          } // <--- ESTA ERA A CHAVE QUE FALTAVA NO SEU CÓDIGO!
 
-          // 2. Ferramenta de Abrir Site
+   // 2. Ferramenta de Abrir Site
           const callSite = calls.find(c => c.name === 'abrir_site');
           if (callSite) {
             const siteParam = callSite.args.site;
-            const pesquisaParam = callSite.args.pesquisa;
-            const acaoParam = callSite.args.acao;
+            const pesquisaParam = callSite.args.pesquisa; // Captura o que a IA decidiu pesquisar
             const callId = callSite.id;
             
-            let msgTela = pesquisaParam 
-               ? (acaoParam === 'tocar' ? `Colocando "${pesquisaParam}" para tocar no ${siteParam}...` : `Pesquisando "${pesquisaParam}" no ${siteParam}...`) 
-               : `Localizando ${siteParam}...`;
-               
+            let msgTela = pesquisaParam ? `Pesquisando "${pesquisaParam}" no ${siteParam}...` : `Localizando ${siteParam}...`;
             if (rh) { rh.style.display = 'block'; rh.textContent = msgTela; }
 
             try {
@@ -4148,23 +4135,18 @@ dlBtn.addEventListener('click', async function () {
               let foundSiteKey = Object.keys(SITE_MAP).find(k => k.includes(siteParam.toLowerCase()) || siteParam.toLowerCase().includes(k));
 
               if (foundSiteKey) {
-                  if (pesquisaParam) {
-                      if (acaoParam === 'tocar' && (foundSiteKey === 'youtube' || foundSiteKey === 'spotify')) {
-                          let domain = foundSiteKey === 'youtube' ? 'youtube.com' : 'spotify.com';
-                          targetUrl = `https://duckduckgo.com/?q=!ducky+site:${domain}+${encodeURIComponent(pesquisaParam)}`;
-                      } else if (SEARCH_MAP[foundSiteKey]) {
-                          targetUrl = SEARCH_MAP[foundSiteKey] + encodeURIComponent(pesquisaParam);
-                      } else {
-                          targetUrl = SITE_MAP[foundSiteKey];
-                      }
+                  // Se o site existe no mapa e a IA mandou algo pra pesquisar
+                  if (pesquisaParam && SEARCH_MAP[foundSiteKey]) {
+                      targetUrl = SEARCH_MAP[foundSiteKey] + encodeURIComponent(pesquisaParam);
                   } else {
                       targetUrl = SITE_MAP[foundSiteKey];
                   }
               } else {
+                  // Fallback: se for uma URL solta ou pesquisa genérica no Google
                   targetUrl = siteParam.startsWith('http') ? siteParam : `https://www.google.com/search?q=${encodeURIComponent(siteParam + (pesquisaParam ? ' ' + pesquisaParam : ''))}`;
               }
 
-              let displaySiteName = siteParam + (pesquisaParam ? (acaoParam === 'tocar' ? ` (Tocando: ${pesquisaParam})` : ` (Pesquisa: ${pesquisaParam})`) : '');
+              let displaySiteName = siteParam + (pesquisaParam ? ` (Pesquisa: ${pesquisaParam})` : '');
 
               if (typeof renderLaunchReply === 'function') {
                 renderLaunchReply(displaySiteName, targetUrl);
@@ -4172,9 +4154,9 @@ dlBtn.addEventListener('click', async function () {
                 window.open(targetUrl, '_blank', 'noopener');
               }
 
-              let statusVoice = (acaoParam === 'tocar' && pesquisaParam)
-                 ? `O conteúdo '${pesquisaParam}' foi colocado para tocar direto na tela do usuário. Confirme a ação com uma frase animada.`
-                 : `O site ${siteParam} foi processado e aberto na tela do usuário. Confirme a ação de forma natural.`;
+              let statusVoice = pesquisaParam
+                 ? `A pesquisa por '${pesquisaParam}' no ${siteParam} foi processada e aberta na tela. Confirme a ação com uma frase curta e carismática.`
+                 : `O site ${siteParam} foi aberto na tela. Confirme a ação com uma frase curta e carismática.`;
 
               ws.send(JSON.stringify({
                 toolResponse: {
@@ -4195,11 +4177,8 @@ dlBtn.addEventListener('click', async function () {
             }
           }
         }
-        
-        return; // As chaves que faltavam foram fechadas, e o return fica aqui no final da checagem de ferramentas!
+        return; // Sai da função para não processar esse frame como texto
       }
-
-      if (msg.setupComplete) {
       
       if (msg.setupComplete) {
         liveActive = true;
