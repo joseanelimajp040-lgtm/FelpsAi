@@ -4025,46 +4025,48 @@ dlBtn.addEventListener('click', async function () {
           tools: [
             { googleSearch: {} },
             {
-              functionDeclarations: [{
-                name: "gerar_imagem",
-                description: "Gera uma imagem baseada no pedido do usuário e exibe na interface.",
-                parameters: {
-                  type: "OBJECT",
-                  properties: {
-                    prompt: {
-                      type: "STRING",
-                      description: "O prompt detalhado descrevendo a imagem que deve ser gerada (em português ou inglês)."
-                    }
-                  },
-                 required: ["prompt"]
-              }
-            },
-           {
-              name: "abrir_site",
-              description: "Abre um site ou aplicativo. Pode também pesquisar ou tocar mídia se o usuário especificar o que quer.",
-              parameters: {
-                type: "OBJECT",
-                properties: {
-                  site: {
-                    type: "STRING",
-                    description: "O nome do site ou plataforma (ex: youtube, amazon, spotify)."
-                  },
-                  pesquisa: {
-                    type: "STRING",
-                    description: "O termo de pesquisa, vídeo ou música a ser buscado. Deixe vazio se for apenas abrir a página."
-                  },
-                  acao: {
-                    type: "STRING",
-                    description: "Use 'tocar' se o usuário pedir para tocar/ouvir uma música ou vídeo específico. Use 'pesquisar' se for apenas para buscar resultados."
+              functionDeclarations: [
+                {
+                  name: "gerar_imagem",
+                  description: "Gera uma imagem baseada no pedido do usuário e exibe na interface.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      prompt: {
+                        type: "STRING",
+                        description: "O prompt detalhado descrevendo a imagem que deve ser gerada (em português ou inglês)."
+                      }
+                    },
+                    required: ["prompt"]
                   }
                 },
-                required: ["site"]
-              }
+                {
+                  name: "abrir_site",
+                  description: "Abre um site ou aplicativo. Pode também pesquisar ou tocar mídia se o usuário especificar o que quer.",
+                  parameters: {
+                    type: "OBJECT",
+                    properties: {
+                      site: {
+                        type: "STRING",
+                        description: "O nome do site ou plataforma (ex: youtube, amazon, spotify)."
+                      },
+                      pesquisa: {
+                        type: "STRING",
+                        description: "O termo de pesquisa, vídeo ou música a ser buscado. Deixe vazio se for apenas abrir a página."
+                      },
+                      acao: {
+                        type: "STRING",
+                        description: "Use 'tocar' se o usuário pedir para tocar/ouvir uma música ou vídeo específico. Use 'pesquisar' se for apenas para buscar resultados."
+                      }
+                    },
+                    required: ["site"]
+                  }
+                }
+              ]
             }
           ]
-        }
-      ],
-          generationConfig: {
+        },
+        generationConfig: {
             responseModalities: ['AUDIO'], 
             speechConfig: {
               voiceConfig: {
