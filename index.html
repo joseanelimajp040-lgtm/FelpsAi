@@ -4109,6 +4109,21 @@ dlBtn.addEventListener('click', async function () {
   name: "parar_visao_tela",
   description: "Para o compartilhamento de tela. Chame quando o usuário pedir para você parar de ver a tela dele."
            }
+          },
+          {
+  name: "controlar_tv",
+  description: "Liga, desliga ou controla parâmetros da Google TV do quarto do usuário via rede ADB.",
+  parameters: {
+    type: "OBJECT",
+    properties: {
+      acao: {
+        type: "STRING",
+        description: "A ação exata desejada: 'ligar', 'desligar', 'vol_up', 'vol_down', 'mutar', 'home'."
+      }
+    },
+    required: ["acao"]
+        }
+         }
           ]
         }
       ],
@@ -4133,7 +4148,8 @@ REGRAS DE TRATAMENTO:
 6. Fale de forma natural, direta e conversacional — como uma IA sofisticada e confiante, não como uma assistente genérica.
 7. AÇÃO OBRIGATÓRIA: Quando o usuário pedir para abrir um site, execute a ferramenta \`abrir_site\`. Após receber a confirmação de sucesso da ferramenta, responda verbalmente de forma curta, natural e sempre variada confirmando a ação (ex: "É pra já, chefe.", "Abrindo o YouTube agora mesmo."). NUNCA escreva textos de log ou intenções em inglês.
 8. CONTROLE DE SISTEMA: Quando o usuário pedir para abrir um programa no computador (ex: "abra o VS Code", "abra o terminal"), execute a ferramenta \`abrir_aplicativo\`. Confirme a ação verbalmente de forma ágil (ex: "Iniciando o sistema agora, chefe.", "Abrindo o terminal, pai.").
-9. VISÃO DE TELA: Quando o usuário pedir para você olhar, ver ou analisar a tela dele, execute IMEDIATAMENTE a ferramenta 'iniciar_visao_tela' e confirme dizendo algo como "Conectando ao seu monitor, chefe.". Para desligar a visão, execute 'parar_visao_tela'.`
+9. VISÃO DE TELA: Quando o usuário pedir para você olhar, ver ou analisar a tela dele, execute IMEDIATAMENTE a ferramenta 'iniciar_visao_tela' e confirme dizendo algo como "Conectando ao seu monitor, chefe.". Para desligar a visão, execute 'parar_visao_tela'.
+10. CONTROLE DE TV: Quando o usuário pedir para ligar, desligar, aumentar/diminuir volume ou ir para a home da TV do quarto, execute IMEDIATAMENTE a ferramenta 'controlar_tv'. Responda verbalmente de forma ágil (ex: "Ligando a tela do quarto, chefe.", "Ajustando o volume, pai.").`
             }]
           }
         }
@@ -4373,7 +4389,48 @@ if (callPararVisao) {
       }]
     }
   }));
-}      
+}
+  // 6. Ferramenta de Controlar a TV via ADB
+const callTV = calls.find(c => c.name === 'controlar_tv');
+if (callTV) {
+  const acaoParam = callTV.args.acao;
+  const callId = callTV.id;
+  
+  if (rh) { rh.style.display = 'block'; rh.textContent = `Enviando comando '${acaoParam}' para a TV...`; }
+
+  try {
+    const resTV = await fetch('http://localhost:3000/controlar-tv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comando: acaoParam })
+    });
+
+    const dataTV = await resTV.json();
+    if (!resTV.ok || !dataTV.success) throw new Error(dataTV.error || 'Falha na ponte ADB');
+
+    ws.send(JSON.stringify({
+      toolResponse: {
+        functionResponses: [{ 
+          id: callId, 
+          name: "controlar_tv", 
+          response: { result: "success", status: `Comando ${acaoParam} executado com sucesso na TV.` } 
+        }]
+      }
+    }));
+
+  } catch (err) {
+    console.error("Erro ao controlar a TV:", err);
+    ws.send(JSON.stringify({
+      toolResponse: {
+        functionResponses: [{ 
+          id: callId, 
+          name: "controlar_tv", 
+          response: { result: "error", reason: "O servidor Node.js local não respondeu ou a TV está offline." } 
+        }]
+      }
+    }));
+  }
+}
         }
         return; // Sai da função para não processar esse frame como texto
       }
