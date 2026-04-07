@@ -3856,6 +3856,9 @@ dlBtn.addEventListener('click', async function () {
       }, LIVE_TIMEOUT_MS);
     }
   }
+  let screenStream = null;
+  let screenCaptureInterval = null;
+  const SCREEN_FPS = 1; // 1 frame por segundo é ideal
   let audioCtx      = null;
   let micStream     = null;
   let processor     = null;
@@ -3970,6 +3973,13 @@ dlBtn.addEventListener('click', async function () {
     aiText        = '';
     userText      = '';
     nextPlayTime  = 0;
+
+    // --- Parar captura de tela se estiver rodando ---
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+  }
+  clearInterval(screenCaptureInterval);
 
     const safeDisconnect = (node) => { try { node?.disconnect(); } catch (_) {} };
     safeDisconnect(processor);  processor  = null;
@@ -4090,6 +4100,14 @@ dlBtn.addEventListener('click', async function () {
     },
     "required": ["app"]
             }
+           },
+         {
+  name: "iniciar_visao_tela",
+  description: "Inicia o compartilhamento de tela do usuário. Chame esta função apenas quando o usuário pedir explicitamente para você 'ver a tela' dele."
+          },
+         {
+  name: "parar_visao_tela",
+  description: "Para o compartilhamento de tela. Chame quando o usuário pedir para você parar de ver a tela dele."
            }
           ]
         }
@@ -4115,6 +4133,7 @@ REGRAS DE TRATAMENTO:
 6. Fale de forma natural, direta e conversacional — como uma IA sofisticada e confiante, não como uma assistente genérica.
 7. AÇÃO OBRIGATÓRIA: Quando o usuário pedir para abrir um site, execute a ferramenta \`abrir_site\`. Após receber a confirmação de sucesso da ferramenta, responda verbalmente de forma curta, natural e sempre variada confirmando a ação (ex: "É pra já, chefe.", "Abrindo o YouTube agora mesmo."). NUNCA escreva textos de log ou intenções em inglês.
 8. CONTROLE DE SISTEMA: Quando o usuário pedir para abrir um programa no computador (ex: "abra o VS Code", "abra o terminal"), execute a ferramenta \`abrir_aplicativo\`. Confirme a ação verbalmente de forma ágil (ex: "Iniciando o sistema agora, chefe.", "Abrindo o terminal, pai.").`
+9. VISÃO DE TELA: Quando o usuário pedir para você olhar, ver ou analisar a tela dele, execute IMEDIATAMENTE a ferramenta `iniciar_visao_tela` e confirme dizendo algo como "Conectando ao seu monitor, chefe.". Para desligar a visão, execute `parar_visao_tela`.
             }]
           }
         }
@@ -4267,10 +4286,94 @@ if (callApp) {
     ws.send(JSON.stringify({
       toolResponse: {
         functionResponses: [{ id: callId, name: "abrir_aplicativo", response: { result: "error", reason: "Não foi possível conectar ao servidor local. Verifique se a ponte Node.js está rodando na porta 3000." } }]
+           }
+         }));
+        }
+       }
+    // 4. Ferramenta de Iniciar Visão de Tela
+const callVisao = calls.find(c => c.name === 'iniciar_visao_tela');
+if (callVisao) {
+  const callId = callVisao.id;
+  if (rh) { rh.style.display = 'block'; rh.textContent = 'Solicitando permissão de tela...'; }
+
+  try {
+    // Pede ao navegador para capturar a tela
+    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    const track = screenStream.getVideoTracks()[0];
+
+    // Prepara um canvas invisível para extrair os frames do vídeo
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const video = document.createElement('video');
+    video.srcObject = screenStream;
+    await video.play();
+
+    // Loop que envia 1 frame por segundo para o Gemini
+    screenCaptureInterval = setInterval(() => {
+      if (ws && ws.readyState === WebSocket.OPEN && liveActive) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        // Converte o frame para base64 JPEG (qualidade 0.5 para economizar banda)
+        const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+
+        ws.send(JSON.stringify({
+          realtimeInput: {
+            mediaChunks: [{ mimeType: 'image/jpeg', data: base64Image }]
+          }
+        }));
+      }
+    }, 1000 / SCREEN_FPS);
+
+    // Se o usuário clicar em "Parar compartilhamento" direto no navegador
+    track.onended = () => {
+      clearInterval(screenCaptureInterval);
+      screenStream = null;
+    };
+
+    // Confirma para a Gênesis que ela agora consegue ver a tela
+    ws.send(JSON.stringify({
+      toolResponse: {
+        functionResponses: [{ 
+          id: callId, 
+          name: "iniciar_visao_tela", 
+          response: { result: "success", status: "Compartilhamento ativo. Você agora está recebendo os frames da tela do usuário. Diga que está vendo." } 
+        }]
+      }
+    }));
+
+  } catch (err) {
+    console.error("Erro na captura de tela:", err);
+    ws.send(JSON.stringify({
+      toolResponse: {
+        functionResponses: [{ id: callId, name: "iniciar_visao_tela", response: { result: "error", reason: "O usuário recusou o compartilhamento de tela." } }]
       }
     }));
   }
 }
+
+// 5. Ferramenta de Parar Visão de Tela
+const callPararVisao = calls.find(c => c.name === 'parar_visao_tela');
+if (callPararVisao) {
+  const callId = callPararVisao.id;
+  
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+  }
+  clearInterval(screenCaptureInterval);
+
+  ws.send(JSON.stringify({
+    toolResponse: {
+      functionResponses: [{ 
+        id: callId, 
+        name: "parar_visao_tela", 
+        response: { result: "success", status: "A captura de tela foi desligada." } 
+      }]
+    }
+  }));
+}      
         }
         return; // Sai da função para não processar esse frame como texto
       }
