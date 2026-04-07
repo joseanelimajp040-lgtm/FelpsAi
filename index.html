@@ -2784,18 +2784,18 @@ imggenGenerate.addEventListener('click', async () => {
     scheduleRestart(600);
   }
 
-  /* ── DETECÇÃO ── */
+ /* ── DETECÇÃO ── */
   function onWakeWordDetected() {
     setWakeDotState('detected');
     showToast('⬡  gênesis ativada', 1800);
 
-    // Pausa wake word (não pode ter 2 reconhecimentos ao mesmo tempo)
+    // Pausa wake word para não dar conflito
     pauseWake();
 
-    // Aciona o microfone principal (função já existente no app)
+    // Aciona o Modo Live enviando um "sinal" de que foi ativado por voz
     setTimeout(() => {
-      if (typeof startListening === 'function' && !isListening && STATE === 'idle') {
-        startListening();
+      if (typeof startLive === 'function' && !liveActive) {
+        startLive(true); // O "true" avisa a função que foi o comando de voz
       }
     }, 300);
   }
@@ -3842,6 +3842,20 @@ dlBtn.addEventListener('click', async function () {
 
   let ws            = null;
   let liveActive    = false;
+  let liveIdleTimer = null;
+  const LIVE_TIMEOUT_MS = 120000; // 2 minutos em milissegundos
+
+  function resetLiveTimer() {
+    clearTimeout(liveIdleTimer);
+    if (liveActive) {
+      liveIdleTimer = setTimeout(() => {
+        if (liveActive) {
+          console.log("[Live Mode] 2 minutos de silêncio. Encerrando conexão.");
+          stopLive(); // Desliga a chamada
+        }
+      }, LIVE_TIMEOUT_MS);
+    }
+  }
   let audioCtx      = null;
   let micStream     = null;
   let processor     = null;
@@ -3978,12 +3992,13 @@ dlBtn.addEventListener('click', async function () {
     document.getElementById('reply-area').scrollTop = 99999;
 
     setTimeout(() => {
+      if (typeof resumeWake === 'function') resumeWake();
       if (footerStat) footerStat.textContent = 'sistema pronto';
-    }, 3000);
+    }, 1500); // Mudei de 3000 para 1500 para a escuta voltar um pouco mais rápido
   }
 
   /* ─── INICIAR LIVE ─── */
-  async function startLive() {
+  async function startLive(fromWakeWord = false) {
     if (liveActive) return;
 
     if (typeof isListening !== 'undefined' && isListening) {
@@ -4273,7 +4288,22 @@ if (callApp) {
         rc.appendChild(hdr);
 
         try { await startAudio(); }
-        catch (err) { showErr('⚠ Microfone: ' + err.message); stopLive(); }
+        catch (err) { showErr('⚠ Microfone: ' + err.message); stopLive(); return; }
+
+        // NOVA LÓGICA: Inicia o timer e pede a saudação
+        resetLiveTimer(); 
+
+        if (fromWakeWord) {
+          // Envia um prompt de sistema rápido na mesma hora que o áudio abre
+          ws.send(JSON.stringify({
+            clientContent: {
+              turns: [{ 
+                role: "user", 
+                parts: [{ text: "O usuário acabou de te ativar chamando seu nome. Cumprimente-o imediatamente de forma curta, leal e orgulhosa (ex: 'Aqui chefe, às ordens', 'Sistemas online, pai') e aguarde." }] 
+              }]
+            }
+          }));
+        }
         return;
       }
 
@@ -4347,6 +4377,7 @@ if (callApp) {
         aiText = '';
         if (typeof setState === 'function') setState('idle');
       }
+     resetLiveTimer();
     };
 
     ws.onerror = () => {
