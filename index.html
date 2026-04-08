@@ -4110,23 +4110,24 @@ dlBtn.addEventListener('click', async function () {
   description: "Para o compartilhamento de tela. Chame quando o usuário pedir para você parar de ver a tela dele."
            },
           {
-  name: "controlar_tv",
-  description: "Controla a Google TV do quarto do usuário. Pode ligar/desligar, mudar volume, definir volume absoluto ou abrir apps como YouTube.",
-  parameters: {
-    type: "OBJECT",
-    properties: {
-      acao: {
-        type: "STRING",
-        description: "Ação desejada: 'ligar', 'desligar', 'vol_up', 'vol_down', 'mutar', 'home', 'youtube', 'set_volume'."
-      },
-      valor: {
-        type: "INTEGER",
-        description: "Obrigatório apenas se a acao for 'set_volume'. Representa o nível numérico do volume que o usuário pediu (ex: 50)."
-      }
-    },
-    required: ["acao"]
-  }
-}
+            name: "controlar_tv",
+            description: "Controla a Google TV do quarto do usuário. Pode ligar/desligar, mudar volume, abrir YouTube, Spotify, TV Aberta ou tocar uma música específica no YouTube.",
+            parameters: {
+              type: "OBJECT",
+              properties: {
+                acao: {
+                  type: "STRING",
+                  description: "Ação desejada: 'ligar', 'desligar', 'vol_up', 'vol_down', 'mutar', 'home', 'youtube', 'spotify', 'tv', 'youtube_tocar'."
+                },
+                valor: {
+                  type: "STRING",
+                  description: "Valor adicional. Se a ação for 'vol_up' ou 'vol_down', mande a quantidade (ex: '5'). Se a ação for 'youtube_tocar', mande o nome da música e artista (ex: 'i wonder kanye west')."
+                }
+              },
+              required: ["acao"]
+            }
+          }
+                                     
           ]
         }
       ],
@@ -4152,7 +4153,10 @@ REGRAS DE TRATAMENTO:
 7. AÇÃO OBRIGATÓRIA: Quando o usuário pedir para abrir um site, execute a ferramenta \`abrir_site\`. Após receber a confirmação de sucesso da ferramenta, responda verbalmente de forma curta, natural e sempre variada confirmando a ação (ex: "É pra já, chefe.", "Abrindo o YouTube agora mesmo."). NUNCA escreva textos de log ou intenções em inglês.
 8. CONTROLE DE SISTEMA: Quando o usuário pedir para abrir um programa no computador (ex: "abra o VS Code", "abra o terminal"), execute a ferramenta \`abrir_aplicativo\`. Confirme a ação verbalmente de forma ágil (ex: "Iniciando o sistema agora, chefe.", "Abrindo o terminal, pai.").
 9. VISÃO DE TELA: Quando o usuário pedir para você olhar, ver ou analisar a tela dele, execute IMEDIATAMENTE a ferramenta 'iniciar_visao_tela' e confirme dizendo algo como "Conectando ao seu monitor, chefe.". Para desligar a visão, execute 'parar_visao_tela'.
-10. CONTROLE DE TV: Quando o usuário pedir para ligar, desligar, abrir o YouTube ou controlar o volume na TV, use a ferramenta 'controlar_tv'. Como a TV não aceita volume absoluto, NUNCA use a ação 'set_volume'. Se o usuário quiser aumentar ou diminuir o volume, use 'vol_up' ou 'vol_down'. Se ele quiser aumentar/diminuir MUITO, passe o parâmetro 'valor' (ex: 15). Se ele não especificar quantidade, passe o valor 3 por padrão. Confirme a ação verbalmente.`
+10. CONTROLE DE TV: Quando o usuário pedir para controlar a TV, use a ferramenta 'controlar_tv'.
+- Para ligar/desligar, ou abrir YouTube, Spotify e TV Aberta: use as ações 'ligar', 'desligar', 'youtube', 'spotify', 'tv'.
+- Para tocar uma música ou vídeo direto no YouTube: use a ação 'youtube_tocar' e envie o termo de busca no parâmetro 'valor'.
+- Para volume: use 'vol_up' ou 'vol_down'. Envie a quantidade no parâmetro 'valor' (ex: '3' ou '15'). Confirme a ação verbalmente de forma fluida.`
             }]
           }
         }
