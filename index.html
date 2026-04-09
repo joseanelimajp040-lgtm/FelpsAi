@@ -2794,8 +2794,9 @@ imggenGenerate.addEventListener('click', async () => {
 
     // Aciona o Modo Live enviando um "sinal" de que foi ativado por voz
     setTimeout(() => {
-      if (typeof startLive === 'function' && !liveActive) {
-        startLive(true); // O "true" avisa a função que foi o comando de voz
+      // Agora chamamos a função globalmente pelo window
+      if (typeof window.startLive === 'function' && !window.isLiveActive()) {
+        window.startLive(true); // O "true" avisa a função que foi o comando de voz
       }
     }, 300);
   }
@@ -3844,6 +3845,8 @@ dlBtn.addEventListener('click', async function () {
   let liveActive    = false;
   let liveIdleTimer = null;
   const LIVE_TIMEOUT_MS = 120000; // 2 minutos em milissegundos
+  window.startLive = startLive;
+  window.isLiveActive = () => liveActive;
 
   function resetLiveTimer() {
     clearTimeout(liveIdleTimer);
